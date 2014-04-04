@@ -267,12 +267,9 @@ void GPUrun() {
 	checkCudaErrors(cudaMemcpy(dev_vertexFaces, vertexFaces, sizeof(uint)*numFaces*3, cudaMemcpyHostToDevice));
 	checkCudaErrors(cudaMemcpy(dev_faceWeights, faceWeights, sizeof(FN_TYPE)*numFaces*3, cudaMemcpyHostToDevice));
 
-	computeLaplacian(dev_nFn, dev_nLap, dev_nbrTracker, dev_nbr, dev_vtxW, dev_heWeights, numVtx, 32);
-	computeLaplacian(dev_cFn, dev_cLap, dev_nbrTracker, dev_nbr, dev_vtxW, dev_heWeights, numVtx, 32);
-	computeFaceGradients(dev_faceVertices, dev_nFn, dev_heGradients, dev_nFaceGradients, numFaces, 32);
-	computeFaceGradients(dev_faceVertices, dev_nFn, dev_heGradients, dev_cFaceGradients, numFaces, 32);
-	computeVertexGradients(dev_nFaceGradients, dev_nVertexGradients, dev_faceTracker, dev_vertexFaces, dev_faceWeights, numVtx, 32);
-	computeVertexGradients(dev_cFaceGradients, dev_cVertexGradients, dev_faceTracker, dev_vertexFaces, dev_faceWeights, numVtx, 32);
+	computeLaplacian(dev_nFn, dev_cFn, dev_nLap, dev_cLap, dev_nbrTracker, dev_nbr, dev_vtxW, dev_heWeights, numVtx, 32);
+	computeFaceGradients(dev_faceVertices, dev_nFn, dev_cFn, dev_heGradients, dev_nFaceGradients, dev_cFaceGradients, numFaces, 32);
+	computeVertexGradients(dev_nFaceGradients, dev_cFaceGradients, dev_nVertexGradients, dev_cVertexGradients, dev_faceTracker, dev_vertexFaces, dev_faceWeights, numVtx, 32);
 
 	FN_TYPE *test_nFn = new FN_TYPE[numVtx];
 	FN_TYPE *test_cFn = new FN_TYPE[numVtx];
@@ -311,12 +308,9 @@ void GPUrun() {
 		cudaEventRecord(start, 0);
 
 		for (int i = 0; i < maxIt; i++) {
-			computeLaplacian(dev_nFn, dev_nLap, dev_nbrTracker, dev_nbr, dev_vtxW, dev_heWeights, numVtx, th);
-			computeLaplacian(dev_cFn, dev_cLap, dev_nbrTracker, dev_nbr, dev_vtxW, dev_heWeights, numVtx, th);
-			computeFaceGradients(dev_faceVertices, dev_nFn, dev_heGradients, dev_nFaceGradients, numFaces, th);
-			computeFaceGradients(dev_faceVertices, dev_nFn, dev_heGradients, dev_cFaceGradients, numFaces, th);
-			computeVertexGradients(dev_nFaceGradients, dev_nVertexGradients, dev_faceTracker, dev_vertexFaces, dev_faceWeights, numVtx, th);
-			computeVertexGradients(dev_cFaceGradients, dev_cVertexGradients, dev_faceTracker, dev_vertexFaces, dev_faceWeights, numVtx, th);
+			computeLaplacian(dev_nFn, dev_cFn, dev_nLap, dev_cLap, dev_nbrTracker, dev_nbr, dev_vtxW, dev_heWeights, numVtx, th);
+			computeFaceGradients(dev_faceVertices, dev_nFn, dev_cFn, dev_heGradients, dev_nFaceGradients, dev_cFaceGradients, numFaces, th);
+			computeVertexGradients(dev_nFaceGradients, dev_cFaceGradients, dev_nVertexGradients, dev_cVertexGradients, dev_faceTracker, dev_vertexFaces, dev_faceWeights, numVtx, th);
 			update(dev_nFn, dev_cFn, dev_nLap, dev_cLap, dev_nVertexGradients, dev_cVertexGradients, dt, numVtx, th);
 		}
 
