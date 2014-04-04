@@ -20,6 +20,9 @@
 *.out
 *.app
 
+# Temporary files
+*~
+
 ######################
 # Eclipse
 ######################
@@ -27,9 +30,8 @@
 .project
 .metadata
 Release/**
+Debug/**
 bin/**
-tmp/**
-tmp/**/*
 *.tmp
 *.bak
 *.swp
@@ -38,10 +40,6 @@ local.properties
 .classpath
 .settings/
 .loadpath
-/src/main/resources/rebel.xml
-
-# External tool builders
-.externalToolBuilders/
 
 # Locally stored "Eclipse launch configurations"
 *.launch
