@@ -234,4 +234,5 @@ src/FEM_common.o : ../src/FEM_common.cu \
     /usr/local/include/OpenMesh/Core/Utils/SingletonT.hh \
     /usr/local/include/OpenMesh/Core/Utils/SingletonT.cc \
     /usr/local/include/OpenMesh/Core/Utils/vector_cast.hh \
-    /usr/local/include/OpenMesh/Core/Mesh/TriMeshT.cc
+    /usr/local/include/OpenMesh/Core/Mesh/TriMeshT.cc \
+    /usr/local/cuda-5.5/samples/common/inc/helper_math.h

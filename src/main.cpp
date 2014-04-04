@@ -104,7 +104,6 @@ int main(int argc, char **argv) {
 
 	printf("\nIt worked!\n");
 	return 0;
-
 }
 
 void initializeData() {

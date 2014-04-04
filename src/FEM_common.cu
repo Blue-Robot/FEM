@@ -1,5 +1,6 @@
 #include "FEM_common.h"
 #include <stdio.h>
+#include "helper_math.h"
 
 
 const FN_TYPE nMax  = 1;
@@ -50,25 +51,17 @@ __global__ void computeFaceGradientsKernel(uint *fv, FN_TYPE *nFn, FN_TYPE *cFn,
 	if (i >= faces) return;
 
 	FN_TYPE nv1 = nFn[fv[i*3+2]];
-	FN_TYPE nv2 = nFn[fv[i*3]];
-	FN_TYPE nv3 = nFn[fv[i*3+1]];
+	FN_TYPE nv12 = nFn[fv[i*3]] - nv1;
+	FN_TYPE nv13 = nFn[fv[i*3+1]] - nv1;
 	FN_TYPE cv1 = cFn[fv[i*3+2]];
-	FN_TYPE cv2 = cFn[fv[i*3]];
-	FN_TYPE cv3 = cFn[fv[i*3+1]];
+	FN_TYPE cv12 = cFn[fv[i*3]] - cv1;
+	FN_TYPE cv13 = cFn[fv[i*3+1]] - cv1;
 
 	float3 grad12 = grads[i*2];
 	float3 grad13 = grads[i*2+1];
 
-	nfGrads[i] = make_float3(
-			grad12.x*(nv2-nv1) + grad13.x*(nv3-nv1),
-			grad12.y*(nv2-nv1) + grad13.y*(nv3-nv1),
-			grad12.z*(nv2-nv1) + grad13.z*(nv3-nv1)
-	);
-	cfGrads[i] = make_float3(
-			grad12.x*(cv2-cv1) + grad13.x*(cv3-cv1),
-			grad12.y*(cv2-cv1) + grad13.y*(cv3-cv1),
-			grad12.z*(cv2-cv1) + grad13.z*(cv3-cv1)
-	);
+	nfGrads[i] = grad12*nv12 + grad13*nv13;
+	cfGrads[i] = grad12*cv12 + grad13*cv13;
 }
 
 extern "C" void computeVertexGradients(float3 *nfGrads, float3 *cfGrads, float3 *nvGrads, float3 *cvGrads, uint *t, uint *faces, FN_TYPE *fW, uint vertices, uint threads) {
@@ -83,23 +76,19 @@ __global__ void computeVertexGradientsKernel(float3 *nfGrads, float3 *cfGrads, f
 
 	float3 ng = make_float3(0.0f, 0.0f, 0.0f);
 	float3 cg = make_float3(0.0f, 0.0f, 0.0f);
+	FN_TYPE wg = 0;
 
 	int end = t[i+1];
-	float3 nf;
-	float3 cf;
-	FN_TYPE w;
-	FN_TYPE wg = 0;
 	for (int j = t[i]; j < end; j++) {
-		nf = nfGrads[faces[j]];
-		cf = cfGrads[faces[j]];
-		w = fW[j];
-		ng = make_float3(ng.x + w*nf.x, ng.y + w*nf.y, ng.z + w*nf.z);
-		cg = make_float3(cg.x + w*cf.x, cg.y + w*cf.y, cg.z + w*cf.z);
+		uint face = faces[j];
+		FN_TYPE w = fW[j];
+		ng += w*nfGrads[face];
+		cg += w*cfGrads[face];
 		wg += w;
 	}
 	if (wg > 0) {
-		nvGrads[i] = make_float3(ng.x/wg, ng.y/wg, ng.z/wg);
-		cvGrads[i] = make_float3(cg.x/wg, cg.y/wg, cg.z/wg);
+		nvGrads[i] = ng/wg;
+		cvGrads[i] = cg/wg;
 	} else {
 		nvGrads[i] = make_float3(0.0f, 0.0f, 0.0f);
 		cvGrads[i] = make_float3(0.0f, 0.0f, 0.0f);
@@ -118,9 +107,9 @@ __global__ void updateKernel(FN_TYPE *nFn, FN_TYPE *cFn, FN_TYPE *nLap, FN_TYPE 
 
 	float3 nVG = nVtxGrad[i];
 	float3 cVG = cVtxGrad[i];
-	FN_TYPE dot = nVG.x*cVG.x + nVG.y*cVG.y + nVG.z*cVG.z;
+	FN_TYPE dotP = dot(nVG, cVG);
 
-	FN_TYPE dauN = D*nLap[i] - alpha*nFn[i]*cLap[i] - alpha*dot + S*r*nFn[i]*(nMax - nFn[i]);
+	FN_TYPE dauN = D*nLap[i] - alpha*nFn[i]*cLap[i] - alpha*dotP + S*r*nFn[i]*(nMax - nFn[i]);
 	FN_TYPE dauC = cLap[i] + S*(nFn[i]/(1+nFn[i]) - cFn[i]);
 
 	nFn[i] += dt*dauN;
