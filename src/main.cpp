@@ -73,13 +73,7 @@ uint *neighbors;
 uint *faceTracker;
 uint *vertexFaces;
 uint *faceVertices;
-
 float3 *gradients;
-//float3 *heGradients;
-//float3 *nFaceGradients;
-//float3 *cFaceGradients;
-//float3 *nVertexGradients;
-//float3 *cVertexGradients;
 
 using namespace OpenMesh;
 
@@ -266,15 +260,15 @@ void GPUrun() {
 	checkCudaErrors(cudaMemcpy(dev_vertexFaces, vertexFaces, sizeof(uint)*numFaces*3, cudaMemcpyHostToDevice));
 	checkCudaErrors(cudaMemcpy(dev_faceWeights, faceWeights, sizeof(FN_TYPE)*numFaces*3, cudaMemcpyHostToDevice));
 
-	computeLaplacian(dev_nFn, dev_cFn, dev_nLap, dev_cLap, dev_nbrTracker, dev_nbr, dev_vtxW, dev_heWeights, numVtx, 32);
-	computeFaceGradients(dev_faceVertices, dev_nFn, dev_cFn, dev_heGradients, dev_nFaceGradients, dev_cFaceGradients, numFaces, 32);
-	computeVertexGradients(dev_nFaceGradients, dev_cFaceGradients, dev_nVertexGradients, dev_cVertexGradients, dev_faceTracker, dev_vertexFaces, dev_faceWeights, numVtx, 32);
+	computeLaplacian(dev_nFn, dev_cFn, dev_nLap, dev_cLap, dev_nbrTracker, dev_nbr, dev_vtxW, dev_heWeights, numVtx, 64);
+	computeFaceGradients(dev_faceVertices, dev_nFn, dev_cFn, dev_heGradients, dev_nFaceGradients, dev_cFaceGradients, numFaces, 64);
+	computeVertexGradients(dev_nFaceGradients, dev_cFaceGradients, dev_nVertexGradients, dev_cVertexGradients, dev_faceTracker, dev_vertexFaces, dev_faceWeights, numVtx, 64);
 
 	FN_TYPE *test_nFn = new FN_TYPE[numVtx];
 	FN_TYPE *test_cFn = new FN_TYPE[numVtx];
 	CPUrun(test_nFn, test_cFn);
 
-	update(dev_nFn, dev_cFn, dev_nLap, dev_cLap, dev_nVertexGradients, dev_cVertexGradients, dt, numVtx, 32);
+	update(dev_nFn, dev_cFn, dev_nLap, dev_cLap, dev_nVertexGradients, dev_cVertexGradients, dt, numVtx, 64);
 
 	// Error Test
 	checkCudaErrors(cudaDeviceSynchronize());
