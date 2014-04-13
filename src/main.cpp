@@ -41,6 +41,7 @@
 #include "common.h"
 #include "mesh_function.h"
 #include "FEM_common.h"
+#include "partitioning_common.h"
 
 // Model
 const FN_TYPE nMax = 1;
@@ -94,6 +95,9 @@ int main(int argc, char **argv) {
 	initializeData();
 	initializeGPUData();
 
+	partition(ipMesh, 20);
+	return 0;
+
 	GPUrun();
 
 	printf("\nIt worked!\n");
@@ -137,6 +141,7 @@ void initializeCUDA() {
 void initializeGPUData() {
 	VertexHandle *mesh = new VertexHandle[numVtx];
 	SimpleTriMesh::VertexIter vIter, vEnd(ipMesh.vertices_end());
+
 	for (vIter = ipMesh.vertices_begin(); vIter != vEnd; ++vIter) {
 		mesh[vIter.handle().idx()] = vIter.handle();
 	}
