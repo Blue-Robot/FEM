@@ -19,6 +19,7 @@
 #include <dirent.h>
 #include <string>
 #include <math.h>
+#include <list>
 
 // OpenMesh Includes
 #include <IO/MeshIO.hh>
@@ -82,6 +83,7 @@ int main(int argc, char **argv);
 
 void initializeCUDA();
 void initializeData();
+void reorderMesh();
 void initializeGPUData();
 
 void GPUrun();
@@ -95,9 +97,6 @@ int main(int argc, char **argv) {
 	initializeData();
 	initializeGPUData();
 
-	partition(ipMesh, 20);
-	return 0;
-
 	GPUrun();
 
 	printf("\nIt worked!\n");
@@ -105,16 +104,19 @@ int main(int argc, char **argv) {
 }
 
 void initializeData() {
+	// reorder mesh
 	OpenMesh::IO::Options opt(OpenMesh::IO::Options::VertexColor | OpenMesh::IO::Options::VertexNormal);
 
 	ipMesh.request_vertex_normals();
 	OpenMesh::IO::read_mesh(ipMesh, file_name, opt);
 
-	initMeshStats(ipMesh, mStats);
+	reorderMesh();
 
 	numAngles = ipMesh.n_halfedges();
 	numVtx = ipMesh.n_vertices();
 	numFaces = ipMesh.n_faces();
+
+	initMeshStats(ipMesh, mStats);
 
 	nFn = new FN_TYPE[numVtx];
 	cFn = new FN_TYPE[numVtx];
@@ -127,6 +129,34 @@ void initializeData() {
 	}
 
 	dt = mStats.maxEdgeLen * mStats.maxEdgeLen * 0.1;
+}
+
+void reorderMesh() {
+	SimpleTriMesh tmpMesh = ipMesh;
+	ipMesh.clear();
+
+	long int *npart = new long int[tmpMesh.n_vertices()];
+	partition(tmpMesh, npart, 20);
+
+	long int *npart_inv = new long int[tmpMesh.n_vertices()];
+	for (int i = 0; i < tmpMesh.n_vertices(); i++) {
+		int index = npart[i];
+		npart_inv[index] = i;
+	}
+
+	for (int i = 0; i < tmpMesh.n_vertices(); i++) {
+		VertexHandle v = tmpMesh.vertex_handle(npart_inv[i]);
+		ipMesh.add_vertex(tmpMesh.point(v));
+	}
+
+	for (SimpleTriMesh::FaceIter fIter = tmpMesh.faces_begin(); fIter != tmpMesh.faces_end(); ++fIter) {
+		SimpleTriMesh::FaceVertexIter fvIter = tmpMesh.fv_begin(fIter.handle());
+		VertexHandle v1 = ipMesh.vertex_handle(npart[fvIter.handle().idx()]); ++fvIter;
+		VertexHandle v2 = ipMesh.vertex_handle(npart[fvIter.handle().idx()]); ++fvIter;
+		VertexHandle v3 = ipMesh.vertex_handle(npart[fvIter.handle().idx()]);
+
+		ipMesh.add_face(v1, v2, v3);
+	}
 }
 
 void initializeCUDA() {
@@ -144,6 +174,7 @@ void initializeGPUData() {
 
 	for (vIter = ipMesh.vertices_begin(); vIter != vEnd; ++vIter) {
 		mesh[vIter.handle().idx()] = vIter.handle();
+
 	}
 
 	// TO-DO: bring vertices in fast order

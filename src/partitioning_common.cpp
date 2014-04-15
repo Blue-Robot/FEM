@@ -5,13 +5,13 @@
 using namespace std;
 
 
-extern "C" int partition(SimpleTriMesh ipMesh, int parts) {
+extern "C" int partition(SimpleTriMesh ipMesh, long int *npart, int parts) {
 	idx_t numVtx = ipMesh.n_vertices();
 	idx_t numFaces = ipMesh.n_faces();
 	idx_t numAngles = ipMesh.n_halfedges();
 	idx_t *eptr = new idx_t[numFaces+1], *eind = new idx_t[numAngles];
 	eptr[0] = 0;
-	idx_t *epart = new idx_t[numFaces], *npart = new idx_t[numVtx];
+	idx_t *epart = new idx_t[numFaces];
 
 	int counter = 0;
 	for (int i = 0; i < numFaces; i++) {
@@ -25,11 +25,16 @@ extern "C" int partition(SimpleTriMesh ipMesh, int parts) {
 
 		eptr[i+1] = counter;
 	}
+
 	idx_t objval;
 	idx_t nparts = parts;
 	idx_t ncommon = 2;
-	idx_t *options=NULL;
-	int success = METIS_PartMeshDual(&numFaces, &numVtx, eptr, eind, NULL, NULL, &ncommon, &nparts, NULL, options, &objval, epart, npart);
+	idx_t options[METIS_NOPTIONS];
+	METIS_SetDefaultOptions(options);
+	options[METIS_OPTION_NUMBERING] = 0;
+
+	int success = METIS_PartMeshDual(&numFaces, &numVtx, eptr, eind, NULL, NULL, &ncommon, &nparts, NULL, options, &objval, epart, (idx_t*)npart);
+
 	if (METIS_OK != success) {
 		switch(success) {
 		case METIS_ERROR_INPUT:
@@ -46,6 +51,25 @@ extern "C" int partition(SimpleTriMesh ipMesh, int parts) {
 
 		}
 
+	}
+
+	long *part_freq = new long[nparts]; std::fill_n(part_freq, nparts, 0);
+	//long *part_sum ...
+	long *npart_tmp = new long[numVtx];
+	for (long i = 0; i < numVtx; i++) {
+		long part_idx = npart[i];
+		npart_tmp[i] = part_freq[part_idx];
+		part_freq[part_idx]++;
+	}
+
+	for (long i = 0; i < nparts; i++) {
+		part_freq[i] += i == 0 ? 0 : part_freq[i-1];
+	}
+
+	for (long i = 0; i < numVtx; i++) {
+		long part_idx = npart[i];
+		long offset = part_idx == 0 ? 0 : part_freq[part_idx - 1];
+		npart[i] = npart_tmp[i] + offset;
 	}
 
 	return objval;
