@@ -57,7 +57,8 @@ double dt;
 string file_name;
 
 // OpenMesh
-SimpleTriMesh ipMesh;
+SimpleTriMesh originalMesh;
+SimpleTriMesh orderedMesh;
 MeshStats mStats;
 uint numAngles;
 uint numVtx;
@@ -77,16 +78,21 @@ uint *vertexFaces;
 uint *faceVertices;
 float3 *gradients;
 
+//batch configuration
+int start_n = 20;
+int end_n = 21;
+
 using namespace OpenMesh;
 
 int main(int argc, char **argv);
 
 void initializeCUDA();
-void initializeData();
-void reorderMesh();
+void loadMesh();
+void initializeData(int n);
+void reorderMesh(int n);
 void initializeGPUData();
 
-void GPUrun();
+double GPUrun();
 void CPUrun(FN_TYPE *test_nFn, FN_TYPE *test_cFn);
 
 
@@ -94,29 +100,42 @@ int main(int argc, char **argv) {
 	file_name = argv[1];
 
 	initializeCUDA();
-	initializeData();
-	initializeGPUData();
+	loadMesh();
 
-	GPUrun();
+	double best_time;
+	int best_n=-1;
+	for (int i = start_n; i <= end_n; i++) {
+		initializeData(i);
+		initializeGPUData();
 
-	printf("\nIt worked!\n");
+		double time = GPUrun();
+		if (best_n == -1 || best_time > time) {
+			best_n = i;
+			best_time = time;
+		}
+
+	}
+	printf("Best time with %d partitions is %f!\n", best_n, best_time);
+
+	printf("It worked!\n");
 	return 0;
 }
-
-void initializeData() {
-	// reorder mesh
+void loadMesh() {
 	OpenMesh::IO::Options opt(OpenMesh::IO::Options::VertexColor | OpenMesh::IO::Options::VertexNormal);
 
-	ipMesh.request_vertex_normals();
-	OpenMesh::IO::read_mesh(ipMesh, file_name, opt);
+	originalMesh.request_vertex_normals();
+	OpenMesh::IO::read_mesh(originalMesh, file_name, opt);
+}
 
-	reorderMesh();
+void initializeData(int n) {
+	// reorder mesh
+	reorderMesh(n);
 
-	numAngles = ipMesh.n_halfedges();
-	numVtx = ipMesh.n_vertices();
-	numFaces = ipMesh.n_faces();
+	numAngles = orderedMesh.n_halfedges();
+	numVtx = orderedMesh.n_vertices();
+	numFaces = orderedMesh.n_faces();
 
-	initMeshStats(ipMesh, mStats);
+	initMeshStats(orderedMesh, mStats);
 
 	nFn = new FN_TYPE[numVtx];
 	cFn = new FN_TYPE[numVtx];
@@ -131,31 +150,32 @@ void initializeData() {
 	dt = mStats.maxEdgeLen * mStats.maxEdgeLen * 0.1;
 }
 
-void reorderMesh() {
-	SimpleTriMesh tmpMesh = ipMesh;
-	ipMesh.clear();
+// TO-DO move stuff into partitioning file
+void reorderMesh(int n) {
+	orderedMesh = originalMesh;
+	orderedMesh.clean();
 
-	long int *npart = new long int[tmpMesh.n_vertices()];
-	partition(tmpMesh, npart, 20);
+	long int *npart = new long int[originalMesh.n_vertices()];
+	partition(originalMesh, npart, n);
 
-	long int *npart_inv = new long int[tmpMesh.n_vertices()];
-	for (int i = 0; i < tmpMesh.n_vertices(); i++) {
+	long int *npart_inv = new long int[originalMesh.n_vertices()];
+	for (int i = 0; i < originalMesh.n_vertices(); i++) {
 		int index = npart[i];
 		npart_inv[index] = i;
 	}
 
-	for (int i = 0; i < tmpMesh.n_vertices(); i++) {
-		VertexHandle v = tmpMesh.vertex_handle(npart_inv[i]);
-		ipMesh.add_vertex(tmpMesh.point(v));
+	for (int i = 0; i < originalMesh.n_vertices(); i++) {
+		VertexHandle v = originalMesh.vertex_handle(npart_inv[i]);
+		orderedMesh.add_vertex(originalMesh.point(v));
 	}
 
-	for (SimpleTriMesh::FaceIter fIter = tmpMesh.faces_begin(); fIter != tmpMesh.faces_end(); ++fIter) {
-		SimpleTriMesh::FaceVertexIter fvIter = tmpMesh.fv_begin(fIter.handle());
-		VertexHandle v1 = ipMesh.vertex_handle(npart[fvIter.handle().idx()]); ++fvIter;
-		VertexHandle v2 = ipMesh.vertex_handle(npart[fvIter.handle().idx()]); ++fvIter;
-		VertexHandle v3 = ipMesh.vertex_handle(npart[fvIter.handle().idx()]);
+	for (SimpleTriMesh::FaceIter fIter = originalMesh.faces_begin(); fIter != originalMesh.faces_end(); ++fIter) {
+		SimpleTriMesh::FaceVertexIter fvIter = originalMesh.fv_begin(fIter.handle());
+		VertexHandle v1 = orderedMesh.vertex_handle(npart[fvIter.handle().idx()]); ++fvIter;
+		VertexHandle v2 = orderedMesh.vertex_handle(npart[fvIter.handle().idx()]); ++fvIter;
+		VertexHandle v3 = orderedMesh.vertex_handle(npart[fvIter.handle().idx()]);
 
-		ipMesh.add_face(v1, v2, v3);
+		orderedMesh.add_face(v1, v2, v3);
 	}
 }
 
@@ -170,9 +190,9 @@ void initializeCUDA() {
 
 void initializeGPUData() {
 	VertexHandle *mesh = new VertexHandle[numVtx];
-	SimpleTriMesh::VertexIter vIter, vEnd(ipMesh.vertices_end());
+	SimpleTriMesh::VertexIter vIter, vEnd(orderedMesh.vertices_end());
 
-	for (vIter = ipMesh.vertices_begin(); vIter != vEnd; ++vIter) {
+	for (vIter = orderedMesh.vertices_begin(); vIter != vEnd; ++vIter) {
 		mesh[vIter.handle().idx()] = vIter.handle();
 
 	}
@@ -200,16 +220,16 @@ void initializeGPUData() {
 		faceTracker[i + 1] = 0;
 
 		SimpleTriMesh::VertexOHalfedgeIter heIter;
-		for (heIter = ipMesh.voh_begin(v); heIter; ++heIter) {
-			vNbr = ipMesh.to_vertex_handle(heIter.handle());
+		for (heIter = orderedMesh.voh_begin(v); heIter; ++heIter) {
+			vNbr = orderedMesh.to_vertex_handle(heIter.handle());
 			neighbors[nbrTracker[i] + nbrTracker[i + 1]] = vNbr.idx(); //add neighbor reference
 			heWeights[nbrTracker[i] + nbrTracker[i + 1]] = mStats.wHej[heIter.handle().idx()]; // add weight value
 			nbrTracker[i + 1]++; // update tracker
 
-			if (!ipMesh.is_boundary(heIter.handle())) {
-				f = ipMesh.face_handle(heIter.handle());
+			if (!orderedMesh.is_boundary(heIter.handle())) {
+				f = orderedMesh.face_handle(heIter.handle());
 				vertexFaces[faceTracker[i] + faceTracker[i + 1]] = f.idx();
-				faceWeights[faceTracker[i] + faceTracker[i + 1]] = mStats.meshAngle[ipMesh.prev_halfedge_handle( heIter.handle()).idx()];
+				faceWeights[faceTracker[i] + faceTracker[i + 1]] = mStats.meshAngle[orderedMesh.prev_halfedge_handle( heIter.handle()).idx()];
 				faceTracker[i + 1]++;
 			}
 		}
@@ -219,10 +239,10 @@ void initializeGPUData() {
 
 	// Set up faces
 	faceVertices = new uint[numFaces * 3];
-	SimpleTriMesh::FaceIter fIter, fEnd = ipMesh.faces_end();
-	for (fIter = ipMesh.faces_begin(); fIter != fEnd; ++fIter) {
+	SimpleTriMesh::FaceIter fIter, fEnd = orderedMesh.faces_end();
+	for (fIter = orderedMesh.faces_begin(); fIter != fEnd; ++fIter) {
 		uint fIdx = fIter.handle().idx();
-		SimpleTriMesh::FaceVertexIter fvIter = ipMesh.fv_begin(fIter.handle());
+		SimpleTriMesh::FaceVertexIter fvIter = orderedMesh.fv_begin(fIter.handle());
 		for (int i = 0; i < 3; i++) {
 			uint vIdx = fvIter.handle().idx();
 			faceVertices[fIdx * 3 + i] = vIdx;
@@ -242,7 +262,7 @@ void initializeGPUData() {
 	}
 }
 
-void GPUrun() {
+double GPUrun() {
 	FN_TYPE *dev_nFn;
 	FN_TYPE *dev_cFn;
 	FN_TYPE *dev_nLap;
@@ -373,7 +393,7 @@ void GPUrun() {
 	checkCudaErrors(cudaFree(dev_faceTracker));
 	checkCudaErrors(cudaFree(dev_vertexFaces));
 	checkCudaErrors(cudaFree(dev_faceWeights));
-
+	return 1000*best_time/maxIt;
 }
 
 void CPUrun(FN_TYPE *test_nFn, FN_TYPE *test_cFn) {
@@ -386,14 +406,14 @@ void CPUrun(FN_TYPE *test_nFn, FN_TYPE *test_cFn) {
 	FN_TYPE *dauN = new FN_TYPE[numVtx];
 	FN_TYPE *dauC = new FN_TYPE[numVtx];
 
-	computeLaplacianCPU<FN_TYPE>(ipMesh, nFn, nLap, mStats.wHej, mStats.wVtx);
-	computeLaplacianCPU<FN_TYPE>(ipMesh, cFn, cLap, mStats.wHej, mStats.wVtx);
+	computeLaplacianCPU<FN_TYPE>(orderedMesh, nFn, nLap, mStats.wHej, mStats.wVtx);
+	computeLaplacianCPU<FN_TYPE>(orderedMesh, cFn, cLap, mStats.wHej, mStats.wVtx);
 
-	computeFaceGradientsCPU<OpenMesh::Vec3f>(ipMesh, mStats.gradVec12, mStats.gradVec13, facGradN, nFn);
-	computeVertexGradientsCPU<OpenMesh::Vec3f>(ipMesh, facGradN, vtxGradN, mStats.meshAngle);
+	computeFaceGradientsCPU<OpenMesh::Vec3f>(orderedMesh, mStats.gradVec12, mStats.gradVec13, facGradN, nFn);
+	computeVertexGradientsCPU<OpenMesh::Vec3f>(orderedMesh, facGradN, vtxGradN, mStats.meshAngle);
 
-	computeFaceGradientsCPU<OpenMesh::Vec3f>(ipMesh, mStats.gradVec12, mStats.gradVec13, facGradC, cFn);
-	computeVertexGradientsCPU<OpenMesh::Vec3f>(ipMesh, facGradC, vtxGradC, mStats.meshAngle);
+	computeFaceGradientsCPU<OpenMesh::Vec3f>(orderedMesh, mStats.gradVec12, mStats.gradVec13, facGradC, cFn);
+	computeVertexGradientsCPU<OpenMesh::Vec3f>(orderedMesh, facGradC, vtxGradC, mStats.meshAngle);
 
 	for(unsigned int i=0; i < numVtx; ++i)
 	{
