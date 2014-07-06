@@ -3,5 +3,6 @@
 extern "C" int partition(
 		SimpleTriMesh ipMesh,
 		long int *npart,
-		int parts
+		uint *parts,
+		int n
 		);

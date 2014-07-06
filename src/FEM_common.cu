@@ -10,20 +10,21 @@ const FN_TYPE r     = 1.52;
 const FN_TYPE alpha = 12.02;
 const FN_TYPE S     = 1;
 
-__global__ void computeLaplacianKernel(FN_TYPE *nFn, FN_TYPE *cFn, FN_TYPE *nLap, FN_TYPE *cLap, uint *t, uint *nbr, FN_TYPE *vtxW, FN_TYPE *heW, uint vertices);
+__global__ void computeLaplacianKernel(FN_TYPE *nFn, FN_TYPE *cFn, FN_TYPE *nLap, FN_TYPE *cLap, uint *t, uint *nbr, FN_TYPE *vtxW, FN_TYPE *heW, uint *parts, uint vertices);
 __global__ void computeFaceGradientsKernel(uint *fv, FN_TYPE *nFn, FN_TYPE *cFn, float3 *grads, float3 *nfGrads, float3 *cfGrads, uint faces);
 __global__ void computeVertexGradientsKernel(float3 *nfGrads, float3 *cfGrads, float3 *nvGrads, float3 *cvGrads, uint *t, uint *faces, FN_TYPE *fW, uint vertices);
 __global__ void updateKernel(FN_TYPE *nFn, FN_TYPE *cFn, FN_TYPE *nLap, FN_TYPE *cLap, float3 *nVtxGrad, float3 *cVtxGrad, double dt, uint vertices);
 
-extern "C" void computeLaplacian(FN_TYPE *nFn, FN_TYPE *cFn, FN_TYPE *nLap, FN_TYPE *cLap, uint *t, uint *nbr, FN_TYPE *vtxW, FN_TYPE *heW, uint vertices, uint threads) {
+extern "C" void computeLaplacian(FN_TYPE *nFn, FN_TYPE *cFn, FN_TYPE *nLap, FN_TYPE *cLap, uint *t, uint *nbr, FN_TYPE *vtxW, FN_TYPE *heW, uint* parts, uint vertices, uint blocks, uint threads) {
 	dim3 block(threads, 1, 1);
-	dim3 grid(ceil((double)vertices/threads), 1, 1);
-	computeLaplacianKernel<<<grid, block>>>(nFn, cFn, nLap, cLap, t, nbr, vtxW, heW, vertices);
+	dim3 grid(blocks, 1, 1);
+	computeLaplacianKernel<<<grid, block>>>(nFn, cFn, nLap, cLap, t, nbr, vtxW, heW, parts, vertices);
 }
 
-__global__ void computeLaplacianKernel(FN_TYPE *nFn, FN_TYPE *cFn, FN_TYPE *nLap, FN_TYPE *cLap, uint *t, uint *nbr, FN_TYPE *vtxW, FN_TYPE *heW, uint vertices){
-	int i = blockIdx.x*blockDim.x + threadIdx.x;
-	if (i >= vertices) return;
+__global__ void computeLaplacianKernel(FN_TYPE *nFn, FN_TYPE *cFn, FN_TYPE *nLap, FN_TYPE *cLap, uint *t, uint *nbr, FN_TYPE *vtxW, FN_TYPE *heW, uint *parts, uint vertices){
+	int i = parts[blockIdx.x] + threadIdx.x;
+
+	if (i >= parts[blockIdx.x+1]) return;
 
 	FN_TYPE vW = vtxW[i];
 	FN_TYPE n = nFn[i]*vW;

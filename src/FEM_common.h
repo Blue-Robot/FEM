@@ -9,7 +9,9 @@ extern "C" void computeLaplacian(
 		uint *nbr,
 		FN_TYPE *vtxW,
 		FN_TYPE *heW,
+		uint* parts,
 		uint vertices,
+		uint blocks,
 		uint threads
 		);
 

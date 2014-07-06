@@ -5,7 +5,7 @@
 using namespace std;
 
 
-extern "C" int partition(SimpleTriMesh ipMesh, long int *npart, int parts) {
+extern "C" int partition(SimpleTriMesh ipMesh, long int *npart, uint *parts, int n) {
 	idx_t numVtx = ipMesh.n_vertices();
 	idx_t numFaces = ipMesh.n_faces();
 	idx_t numAngles = ipMesh.n_halfedges();
@@ -27,7 +27,7 @@ extern "C" int partition(SimpleTriMesh ipMesh, long int *npart, int parts) {
 	}
 
 	idx_t objval;
-	idx_t nparts = parts;
+	idx_t nparts = n;
 	idx_t ncommon = 2;
 	idx_t options[METIS_NOPTIONS];
 	METIS_SetDefaultOptions(options);
@@ -53,7 +53,7 @@ extern "C" int partition(SimpleTriMesh ipMesh, long int *npart, int parts) {
 
 	}
 
-	long *part_freq = new long[nparts]; std::fill_n(part_freq, nparts, 0);
+	int *part_freq = new int[nparts]; std::fill_n(part_freq, nparts, 0);
 	//long *part_sum ...
 	long *npart_tmp = new long[numVtx];
 	for (long i = 0; i < numVtx; i++) {
@@ -70,6 +70,12 @@ extern "C" int partition(SimpleTriMesh ipMesh, long int *npart, int parts) {
 		long part_idx = npart[i];
 		long offset = part_idx == 0 ? 0 : part_freq[part_idx - 1];
 		npart[i] = npart_tmp[i] + offset;
+	}
+
+	// Add partition start indices
+	for (int i = 0; i < n+1; i++) {
+		parts[i] = i == 0 ? 0 : part_freq[i-1];
+
 	}
 
 	return objval;

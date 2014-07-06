@@ -78,9 +78,11 @@ uint *vertexFaces;
 uint *faceVertices;
 float3 *gradients;
 
+uint *parts;
+
 //batch configuration
 int start_n = 20;
-int end_n = 21;
+int end_n = 20;
 
 using namespace OpenMesh;
 
@@ -92,7 +94,7 @@ void initializeData(int n);
 void reorderMesh(int n);
 void initializeGPUData();
 
-double GPUrun();
+double GPUrun(int n);
 void CPUrun(FN_TYPE *test_nFn, FN_TYPE *test_cFn);
 
 
@@ -108,8 +110,8 @@ int main(int argc, char **argv) {
 		initializeData(i);
 		initializeGPUData();
 
-		double time = GPUrun();
-		if (best_n == -1 || best_time > time) {
+		double time = GPUrun(i);
+		if ((best_n == -1 || best_time > time) && time > 0) {
 			best_n = i;
 			best_time = time;
 		}
@@ -128,7 +130,6 @@ void loadMesh() {
 }
 
 void initializeData(int n) {
-	// reorder mesh
 	reorderMesh(n);
 
 	numAngles = orderedMesh.n_halfedges();
@@ -156,7 +157,8 @@ void reorderMesh(int n) {
 	orderedMesh.clean();
 
 	long int *npart = new long int[originalMesh.n_vertices()];
-	partition(originalMesh, npart, n);
+	parts = new uint[n+1];
+	partition(originalMesh, npart, parts, n);
 
 	long int *npart_inv = new long int[originalMesh.n_vertices()];
 	for (int i = 0; i < originalMesh.n_vertices(); i++) {
@@ -262,7 +264,23 @@ void initializeGPUData() {
 	}
 }
 
-double GPUrun() {
+double GPUrun(int n) {
+	// TO-DO find better spot for this
+	//begin
+	int max_size = 0;
+	for (int i = 0; i < n; i++) {
+		int size = parts[i+1] - parts[i];
+		max_size = std::max(max_size, size);
+	}
+
+	if(max_size > 1024) {
+		printf("ERROR: Too many elements per Block! (%d)\n", max_size);
+		return -1.0;
+	}
+
+	int threads = ((max_size + 32 - 1) / 32) * 32;
+	//end
+
 	FN_TYPE *dev_nFn;
 	FN_TYPE *dev_cFn;
 	FN_TYPE *dev_nLap;
@@ -271,6 +289,7 @@ double GPUrun() {
 	uint *dev_nbr;
 	FN_TYPE *dev_vtxW;
 	FN_TYPE *dev_heWeights;
+	uint* dev_parts;
 
 	uint *dev_faceVertices;
 	float3 *dev_heGradients;
@@ -288,6 +307,7 @@ double GPUrun() {
 	checkCudaErrors(cudaMalloc(&dev_nbr, sizeof(uint)*numAngles));
 	checkCudaErrors(cudaMalloc(&dev_vtxW, sizeof(FN_TYPE)*numVtx));
 	checkCudaErrors(cudaMalloc(&dev_heWeights, sizeof(FN_TYPE)*numAngles));
+	checkCudaErrors(cudaMalloc(&dev_parts, sizeof(uint)*(n+1)));
 
 	checkCudaErrors(cudaMalloc(&dev_faceVertices, sizeof(uint)*numFaces*3));
 	checkCudaErrors(cudaMalloc(&dev_heGradients, sizeof(float3)*numFaces*2));
@@ -310,13 +330,14 @@ double GPUrun() {
 	checkCudaErrors(cudaMemcpy(dev_nbr, neighbors, sizeof(uint)*numAngles, cudaMemcpyHostToDevice));
 	checkCudaErrors(cudaMemcpy(dev_vtxW, mStats.wVtx, sizeof(FN_TYPE)*numVtx, cudaMemcpyHostToDevice));
 	checkCudaErrors(cudaMemcpy(dev_heWeights, heWeights, sizeof(FN_TYPE)*numAngles, cudaMemcpyHostToDevice));
+	checkCudaErrors(cudaMemcpy(dev_parts, parts, sizeof(uint)*(n+1), cudaMemcpyHostToDevice));
 	checkCudaErrors(cudaMemcpy(dev_faceVertices, faceVertices, sizeof(uint)*numFaces*3, cudaMemcpyHostToDevice));
 	checkCudaErrors(cudaMemcpy(dev_heGradients, gradients, sizeof(float3)*numFaces*2, cudaMemcpyHostToDevice));
 	checkCudaErrors(cudaMemcpy(dev_faceTracker, faceTracker, sizeof(uint)*(numVtx+1), cudaMemcpyHostToDevice));
 	checkCudaErrors(cudaMemcpy(dev_vertexFaces, vertexFaces, sizeof(uint)*numFaces*3, cudaMemcpyHostToDevice));
 	checkCudaErrors(cudaMemcpy(dev_faceWeights, faceWeights, sizeof(FN_TYPE)*numFaces*3, cudaMemcpyHostToDevice));
 
-	computeLaplacian(dev_nFn, dev_cFn, dev_nLap, dev_cLap, dev_nbrTracker, dev_nbr, dev_vtxW, dev_heWeights, numVtx, 64);
+	computeLaplacian(dev_nFn, dev_cFn, dev_nLap, dev_cLap, dev_nbrTracker, dev_nbr, dev_vtxW, dev_heWeights, dev_parts, numVtx, n, threads);
 	computeFaceGradients(dev_faceVertices, dev_nFn, dev_cFn, dev_heGradients, dev_nFaceGradients, dev_cFaceGradients, numFaces, 64);
 	computeVertexGradients(dev_nFaceGradients, dev_cFaceGradients, dev_nVertexGradients, dev_cVertexGradients, dev_faceTracker, dev_vertexFaces, dev_faceWeights, numVtx, 64);
 
@@ -357,7 +378,7 @@ double GPUrun() {
 		cudaEventRecord(start, 0);
 
 		for (int i = 0; i < maxIt; i++) {
-			computeLaplacian(dev_nFn, dev_cFn, dev_nLap, dev_cLap, dev_nbrTracker, dev_nbr, dev_vtxW, dev_heWeights, numVtx, th);
+			computeLaplacian(dev_nFn, dev_cFn, dev_nLap, dev_cLap, dev_nbrTracker, dev_nbr, dev_vtxW, dev_heWeights, dev_parts, numVtx, n, threads);
 			computeFaceGradients(dev_faceVertices, dev_nFn, dev_cFn, dev_heGradients, dev_nFaceGradients, dev_cFaceGradients, numFaces, th);
 			computeVertexGradients(dev_nFaceGradients, dev_cFaceGradients, dev_nVertexGradients, dev_cVertexGradients, dev_faceTracker, dev_vertexFaces, dev_faceWeights, numVtx, th);
 			update(dev_nFn, dev_cFn, dev_nLap, dev_cLap, dev_nVertexGradients, dev_cVertexGradients, dt, numVtx, th);
@@ -384,6 +405,7 @@ double GPUrun() {
 	checkCudaErrors(cudaFree(dev_nbr));
 	checkCudaErrors(cudaFree(dev_vtxW));
 	checkCudaErrors(cudaFree(dev_heWeights));
+	checkCudaErrors(cudaFree(dev_parts));
 	checkCudaErrors(cudaFree(dev_faceVertices));
 	checkCudaErrors(cudaFree(dev_heGradients));
 	checkCudaErrors(cudaFree(dev_nFaceGradients));
@@ -393,6 +415,7 @@ double GPUrun() {
 	checkCudaErrors(cudaFree(dev_faceTracker));
 	checkCudaErrors(cudaFree(dev_vertexFaces));
 	checkCudaErrors(cudaFree(dev_faceWeights));
+
 	return 1000*best_time/maxIt;
 }
 
