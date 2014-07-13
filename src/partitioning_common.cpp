@@ -2,10 +2,28 @@
 #include <metis.h>
 #include "partitioning_common.h"
 
+using namespace OpenMesh;
+
+// OpenMesh Includes
+
+
 using namespace std;
 
+extern "C" int partition(SimpleTriMesh *ipMesh, uint *parts, int n);
+int generatePartitions(SimpleTriMesh ipMesh, long int *npart, uint *parts, int n);
+void reorderMesh(SimpleTriMesh *ipMesh, long int *npart);
 
-extern "C" int partition(SimpleTriMesh ipMesh, long int *npart, uint *parts, int n) {
+
+
+
+extern "C" int partition(SimpleTriMesh *ipMesh, uint *parts, int n) {
+	long int *npart = new long int[(*ipMesh).n_vertices()];
+	int communication = generatePartitions(*ipMesh, npart, parts, n);
+	reorderMesh(ipMesh, npart);
+	return communication;
+}
+
+int generatePartitions(SimpleTriMesh ipMesh, long int *npart, uint *parts, int n) {
 	idx_t numVtx = ipMesh.n_vertices();
 	idx_t numFaces = ipMesh.n_faces();
 	idx_t numAngles = ipMesh.n_halfedges();
@@ -80,3 +98,31 @@ extern "C" int partition(SimpleTriMesh ipMesh, long int *npart, uint *parts, int
 
 	return objval;
 }
+
+void reorderMesh(SimpleTriMesh *orderedMesh, long int *npart) {
+	SimpleTriMesh originalMesh = *orderedMesh;
+	(*orderedMesh).clean();
+
+	long int *npart_inv = new long int[originalMesh.n_vertices()];
+	for (int i = 0; i < originalMesh.n_vertices(); i++) {
+		int index = npart[i];
+		npart_inv[index] = i;
+	}
+
+	for (int i = 0; i < originalMesh.n_vertices(); i++) {
+		VertexHandle v = originalMesh.vertex_handle(npart_inv[i]);
+		(*orderedMesh).add_vertex(originalMesh.point(v));
+	}
+
+	for (SimpleTriMesh::FaceIter fIter = originalMesh.faces_begin(); fIter != originalMesh.faces_end(); ++fIter) {
+		SimpleTriMesh::FaceVertexIter fvIter = originalMesh.fv_begin(fIter.handle());
+		VertexHandle v1 = (*orderedMesh).vertex_handle(npart[fvIter.handle().idx()]); ++fvIter;
+		VertexHandle v2 = (*orderedMesh).vertex_handle(npart[fvIter.handle().idx()]); ++fvIter;
+		VertexHandle v3 = (*orderedMesh).vertex_handle(npart[fvIter.handle().idx()]);
+
+		(*orderedMesh).add_face(v1, v2, v3);
+	}
+}
+
+
+

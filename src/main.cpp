@@ -81,8 +81,8 @@ float3 *gradients;
 uint *parts;
 
 //batch configuration
-int start_n = 20;
-int end_n = 20;
+int start_n = 13; // number of partitions to start with
+int end_n = 13; // number of partitions to end with
 
 using namespace OpenMesh;
 
@@ -154,31 +154,12 @@ void initializeData(int n) {
 // TO-DO move stuff into partitioning file
 void reorderMesh(int n) {
 	orderedMesh = originalMesh;
-	orderedMesh.clean();
 
-	long int *npart = new long int[originalMesh.n_vertices()];
 	parts = new uint[n+1];
-	partition(originalMesh, npart, parts, n);
 
-	long int *npart_inv = new long int[originalMesh.n_vertices()];
-	for (int i = 0; i < originalMesh.n_vertices(); i++) {
-		int index = npart[i];
-		npart_inv[index] = i;
-	}
+	partition(&orderedMesh, parts, n);
 
-	for (int i = 0; i < originalMesh.n_vertices(); i++) {
-		VertexHandle v = originalMesh.vertex_handle(npart_inv[i]);
-		orderedMesh.add_vertex(originalMesh.point(v));
-	}
 
-	for (SimpleTriMesh::FaceIter fIter = originalMesh.faces_begin(); fIter != originalMesh.faces_end(); ++fIter) {
-		SimpleTriMesh::FaceVertexIter fvIter = originalMesh.fv_begin(fIter.handle());
-		VertexHandle v1 = orderedMesh.vertex_handle(npart[fvIter.handle().idx()]); ++fvIter;
-		VertexHandle v2 = orderedMesh.vertex_handle(npart[fvIter.handle().idx()]); ++fvIter;
-		VertexHandle v3 = orderedMesh.vertex_handle(npart[fvIter.handle().idx()]);
-
-		orderedMesh.add_face(v1, v2, v3);
-	}
 }
 
 void initializeCUDA() {
@@ -358,10 +339,11 @@ double GPUrun(int n) {
 
 	// Correctness Test
 	double sum_error_n = 0.0, sum_error_c = 0.0;
-	for(int i = 0; i < 10; i++) {
+	for(int i = 0; i < numVtx; i++) {
 		sum_error_n += fabs(nFn[i]-test_nFn[i]);
 		sum_error_c += fabs(cFn[i]-test_cFn[i]);
 	}
+
 
 	printf("Sum / Mean error for n: %f / %f and for c: %f / %f\n", sum_error_n, sum_error_n/numVtx, sum_error_c, sum_error_c/numVtx);
 
