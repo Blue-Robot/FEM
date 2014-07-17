@@ -339,13 +339,16 @@ double GPUrun(int n) {
 
 	// Correctness Test
 	double sum_error_n = 0.0, sum_error_c = 0.0;
+	int error_counter = 0;
 	for(int i = 0; i < numVtx; i++) {
 		sum_error_n += fabs(nFn[i]-test_nFn[i]);
 		sum_error_c += fabs(cFn[i]-test_cFn[i]);
+		if (fabs(nFn[i]-test_nFn[i]) > 0 || fabs(cFn[i]-test_cFn[i]) > 0)
+			error_counter++;
 	}
 
 
-	printf("Sum / Mean error for n: %f / %f and for c: %f / %f\n", sum_error_n, sum_error_n/numVtx, sum_error_c, sum_error_c/numVtx);
+	printf("Sum / Mean error for n: %f / %f and for c: %f / %f. Number of errors in total: %d\n", sum_error_n, sum_error_n/numVtx, sum_error_c, sum_error_c/numVtx, error_counter);
 
 	// Speed Test
 	int maxIt = 1000;
