@@ -1,7 +1,9 @@
 #include "common.h"
 
 extern "C" int partition(
-		SimpleTriMesh *ipMesh,
-		uint *parts,
+		SimpleTriMesh originalMesh,
+		SimpleTriMesh *orderedMesh,
+		uint **node_parts,
+		uint **element_parts,
 		int n
 		);

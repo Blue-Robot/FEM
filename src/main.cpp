@@ -78,11 +78,12 @@ uint *vertexFaces;
 uint *faceVertices;
 float3 *gradients;
 
-uint *parts;
+uint *node_parts;
+uint *element_parts;
 
 //batch configuration
-int start_n = 13; // number of partitions to start with
-int end_n = 13; // number of partitions to end with
+int start_n = 10; // number of partitions to start with
+int end_n = 30; // number of partitions to end with
 
 using namespace OpenMesh;
 
@@ -91,7 +92,6 @@ int main(int argc, char **argv);
 void initializeCUDA();
 void loadMesh();
 void initializeData(int n);
-void reorderMesh(int n);
 void initializeGPUData();
 
 double GPUrun(int n);
@@ -130,7 +130,7 @@ void loadMesh() {
 }
 
 void initializeData(int n) {
-	reorderMesh(n);
+	partition(originalMesh, &orderedMesh, &node_parts, &element_parts, n);
 
 	numAngles = orderedMesh.n_halfedges();
 	numVtx = orderedMesh.n_vertices();
@@ -149,17 +149,6 @@ void initializeData(int n) {
 	}
 
 	dt = mStats.maxEdgeLen * mStats.maxEdgeLen * 0.1;
-}
-
-// TO-DO move stuff into partitioning file
-void reorderMesh(int n) {
-	orderedMesh = originalMesh;
-
-	parts = new uint[n+1];
-
-	partition(&orderedMesh, parts, n);
-
-
 }
 
 void initializeCUDA() {
@@ -250,7 +239,7 @@ double GPUrun(int n) {
 	//begin
 	int max_size = 0;
 	for (int i = 0; i < n; i++) {
-		int size = parts[i+1] - parts[i];
+		int size = node_parts[i+1] - node_parts[i];
 		max_size = std::max(max_size, size);
 	}
 
@@ -311,7 +300,7 @@ double GPUrun(int n) {
 	checkCudaErrors(cudaMemcpy(dev_nbr, neighbors, sizeof(uint)*numAngles, cudaMemcpyHostToDevice));
 	checkCudaErrors(cudaMemcpy(dev_vtxW, mStats.wVtx, sizeof(FN_TYPE)*numVtx, cudaMemcpyHostToDevice));
 	checkCudaErrors(cudaMemcpy(dev_heWeights, heWeights, sizeof(FN_TYPE)*numAngles, cudaMemcpyHostToDevice));
-	checkCudaErrors(cudaMemcpy(dev_parts, parts, sizeof(uint)*(n+1), cudaMemcpyHostToDevice));
+	checkCudaErrors(cudaMemcpy(dev_parts, node_parts, sizeof(uint)*(n+1), cudaMemcpyHostToDevice));
 	checkCudaErrors(cudaMemcpy(dev_faceVertices, faceVertices, sizeof(uint)*numFaces*3, cudaMemcpyHostToDevice));
 	checkCudaErrors(cudaMemcpy(dev_heGradients, gradients, sizeof(float3)*numFaces*2, cudaMemcpyHostToDevice));
 	checkCudaErrors(cudaMemcpy(dev_faceTracker, faceTracker, sizeof(uint)*(numVtx+1), cudaMemcpyHostToDevice));
