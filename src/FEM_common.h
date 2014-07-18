@@ -9,7 +9,7 @@ extern "C" void computeLaplacian(
 		uint *nbr,
 		FN_TYPE *vtxW,
 		FN_TYPE *heW,
-		uint* parts,
+		uint *parts,
 		uint vertices,
 		uint blocks,
 		uint threads
@@ -23,7 +23,9 @@ extern "C" void computeFaceGradients(
 		float3 *grads,
 		float3 *nfGrads,
 		float3 *cfGrads,
+		uint *parts,
 		uint faces,
+		uint blocks,
 		uint threads
 		);
 
