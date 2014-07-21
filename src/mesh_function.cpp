@@ -491,7 +491,7 @@ void computeHijVecForJacobian(SimpleTriMesh &ipMesh, MeshStats &mStats)
 {
  //OpenMesh::Utils::Timer t;
 
-  std::cout << "compute Hij vectors for the Jacobian..." << std::flush;
+  std::cout << "compute Hij vectors for the Jacobian...\n" << std::flush;
  // t.start();
 
   OpenMesh::Vec3f pt1, pt2, pt3;
