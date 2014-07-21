@@ -40,7 +40,9 @@ extern "C" void computeVertexGradients(
 		uint *t,
 		uint *faces,
 		FN_TYPE *fW,
+		uint* parts,
 		uint vertices,
+		uint blocks,
 		uint threads
 		);
 

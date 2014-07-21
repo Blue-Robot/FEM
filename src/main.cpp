@@ -86,7 +86,7 @@ uint *halo_faces_keys;
 
 //batch configuration
 int start_n = 20; // number of partitions to start with
-int end_n = 60; // number of partitions to end with
+int end_n = 30; // number of partitions to end with
 
 using namespace OpenMesh;
 
@@ -358,7 +358,7 @@ double GPUrun(int n) {
 
 	computeLaplacian(dev_nFn, dev_cFn, dev_nLap, dev_cLap, dev_nbrTracker, dev_nbr, dev_vtxW, dev_heWeights, dev_parts_n, numVtx, n, threads_n);
 	computeFaceGradients(dev_faceVertices, dev_nFn, dev_cFn, dev_heGradients, dev_nFaceGradients, dev_cFaceGradients, dev_halo_faces, dev_halo_faces_keys, dev_parts_e, numFaces, n, threads_e);
-	computeVertexGradients(dev_nFaceGradients, dev_cFaceGradients, dev_nVertexGradients, dev_cVertexGradients, dev_faceTracker, dev_vertexFaces, dev_faceWeights, numVtx, 64);
+	computeVertexGradients(dev_nFaceGradients, dev_cFaceGradients, dev_nVertexGradients, dev_cVertexGradients, dev_faceTracker, dev_vertexFaces, dev_faceWeights, dev_parts_n, numVtx, n, threads_n);
 
 	FN_TYPE *test_nFn = new FN_TYPE[numVtx];
 	FN_TYPE *test_cFn = new FN_TYPE[numVtx];
@@ -404,7 +404,7 @@ double GPUrun(int n) {
 		for (int i = 0; i < maxIt; i++) {
 			computeLaplacian(dev_nFn, dev_cFn, dev_nLap, dev_cLap, dev_nbrTracker, dev_nbr, dev_vtxW, dev_heWeights, dev_parts_n, numVtx, n, threads_n);
 			computeFaceGradients(dev_faceVertices, dev_nFn, dev_cFn, dev_heGradients, dev_nFaceGradients, dev_cFaceGradients, dev_halo_faces, dev_halo_faces_keys, dev_parts_e, numFaces, n, threads_n);
-			computeVertexGradients(dev_nFaceGradients, dev_cFaceGradients, dev_nVertexGradients, dev_cVertexGradients, dev_faceTracker, dev_vertexFaces, dev_faceWeights, numVtx, th);
+			computeVertexGradients(dev_nFaceGradients, dev_cFaceGradients, dev_nVertexGradients, dev_cVertexGradients, dev_faceTracker, dev_vertexFaces, dev_faceWeights, dev_parts_n, numVtx, n, threads_n);
 			update(dev_nFn, dev_cFn, dev_nLap, dev_cLap, dev_nVertexGradients, dev_cVertexGradients, dt, numVtx, th);
 		}
 
