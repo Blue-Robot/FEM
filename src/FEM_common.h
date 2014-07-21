@@ -9,6 +9,8 @@ extern "C" void computeLaplacian(
 		uint *nbr,
 		FN_TYPE *vtxW,
 		FN_TYPE *heW,
+		uint *halo_vertices,
+		uint *halo_vertices_keys,
 		uint *parts,
 		uint vertices,
 		uint blocks,
