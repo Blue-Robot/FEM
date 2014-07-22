@@ -10,10 +10,57 @@ const FN_TYPE r     = 1.52;
 const FN_TYPE alpha = 12.02;
 const FN_TYPE S     = 1;
 
+__global__ void computeKernel(FN_TYPE *nFn, FN_TYPE *cFn, FN_TYPE *nLap, FN_TYPE *cLap, uint *t, uint *nbr, FN_TYPE *vtxW, FN_TYPE *heW, uint vertices, float3 *nfGrads, float3 *cfGrads, float3 *nvGrads, float3 *cvGrads, uint *f, uint *faces, FN_TYPE *fW);
 __global__ void computeLaplacianKernel(FN_TYPE *nFn, FN_TYPE *cFn, FN_TYPE *nLap, FN_TYPE *cLap, uint *t, uint *nbr, FN_TYPE *vtxW, FN_TYPE *heW, uint *halo_vertices, uint *halo_vertices_keys, uint *parts, uint vertices);
 __global__ void computeFaceGradientsKernel(uint *fv, FN_TYPE *nFn, FN_TYPE *cFn, float3 *grads, float3 *nfGrads, float3 *cfGrads, uint *halo_faces, uint *halo_faces_keys, uint *parts, uint faces);
 __global__ void computeVertexGradientsKernel(float3 *nfGrads, float3 *cfGrads, float3 *nvGrads, float3 *cvGrads, uint *t, uint *faces, FN_TYPE *fW, uint *parts, uint vertices);
 __global__ void updateKernel(FN_TYPE *nFn, FN_TYPE *cFn, FN_TYPE *nLap, FN_TYPE *cLap, float3 *nVtxGrad, float3 *cVtxGrad, double dt, uint vertices);
+
+extern "C" void compute(FN_TYPE *nFn, FN_TYPE *cFn, FN_TYPE *nLap, FN_TYPE *cLap, uint *t, uint *nbr, FN_TYPE *vtxW, FN_TYPE *heW, uint vertices, float3 *nfGrads, float3 *cfGrads, float3 *nvGrads, float3 *cvGrads, uint *f, uint *faces, FN_TYPE *fW, uint threads) {
+	dim3 block(threads, 1, 1);
+	dim3 grid(ceil((double)vertices/threads), 1, 1);
+	computeKernel<<<grid, block>>>(nFn, cFn, nLap, cLap, t, nbr, vtxW, heW, vertices, nfGrads, cfGrads, nvGrads, cvGrads, f, faces, fW);
+}
+
+__global__ void computeKernel(FN_TYPE *nFn, FN_TYPE *cFn, FN_TYPE *nLap, FN_TYPE *cLap, uint *t, uint *nbr, FN_TYPE *vtxW, FN_TYPE *heW, uint vertices, float3 *nfGrads, float3 *cfGrads, float3 *nvGrads, float3 *cvGrads, uint *f, uint *faces, FN_TYPE *fW){
+	int i = blockIdx.x*blockDim.x + threadIdx.x;
+
+	if (i >= vertices) return;
+
+	FN_TYPE vW = vtxW[i];
+	FN_TYPE n = nFn[i]*vW;
+	FN_TYPE c = cFn[i]*vW;
+
+	int end = t[i+1];
+	for (int j = t[i]; j < end; j++) {
+		int nIdx = nbr[j];
+		FN_TYPE hW = heW[j];
+		n += nFn[nIdx]*hW;
+		c += cFn[nIdx]*hW;
+	}
+	nLap[i] = n;
+	cLap[i] = c;
+
+	float3 ng = make_float3(0.0f, 0.0f, 0.0f);
+	float3 cg = make_float3(0.0f, 0.0f, 0.0f);
+	FN_TYPE wg = 0;
+
+	end = f[i+1];
+	for (int j = f[i]; j < end; j++) {
+		uint face = faces[j];
+		FN_TYPE w = fW[j];
+		ng += w*nfGrads[face];
+		cg += w*cfGrads[face];
+		wg += w;
+	}
+	if (wg > 0) {
+		nvGrads[i] = ng/wg;
+		cvGrads[i] = cg/wg;
+	} else {
+		nvGrads[i] = make_float3(0.0f, 0.0f, 0.0f);
+		cvGrads[i] = make_float3(0.0f, 0.0f, 0.0f);
+	}
+}
 
 extern "C" void computeLaplacian(FN_TYPE *nFn, FN_TYPE *cFn, FN_TYPE *nLap, FN_TYPE *cLap, uint *t, uint *nbr, FN_TYPE *vtxW, FN_TYPE *heW, uint *halo_vertices, uint *halo_vertices_keys, uint* parts, uint vertices, uint blocks, uint threads) {
 	dim3 block(threads, 1, 1);
