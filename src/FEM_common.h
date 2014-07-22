@@ -1,5 +1,23 @@
 #include "common.h"
 
+extern "C" void compute(
+		FN_TYPE *nFn,
+		FN_TYPE *cFn,
+		FN_TYPE *nLap,
+		FN_TYPE *cLap,
+		uint *t,
+		uint *nbr,
+		FN_TYPE *vtxW,
+		FN_TYPE *heW,
+		uint vertices,
+		uint *fv,
+		float3 *grads,
+		float3 *nfGrads,
+		float3 *cfGrads,
+		uint faces,
+		uint threads
+		);
+
 extern "C" void computeLaplacian(
 		FN_TYPE *nFn,
 		FN_TYPE *cFn,
@@ -42,12 +60,14 @@ extern "C" void computeVertexGradients(
 		uint *t,
 		uint *faces,
 		FN_TYPE *fW,
-		uint* parts,
 		uint vertices,
-		uint blocks,
-		uint threads
+		uint threads,
+		FN_TYPE *nFn,
+		FN_TYPE *cFn,
+		FN_TYPE *nLap,
+		FN_TYPE *cLap,
+		double dt
 		);
-
 
 
 extern "C" void update(
