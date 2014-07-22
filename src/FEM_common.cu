@@ -10,18 +10,100 @@ const FN_TYPE r     = 1.52;
 const FN_TYPE alpha = 12.02;
 const FN_TYPE S     = 1;
 
-__global__ void computeLaplacianKernel(FN_TYPE *nFn, FN_TYPE *cFn, FN_TYPE *nLap, FN_TYPE *cLap, uint *t, uint *nbr, FN_TYPE *vtxW, FN_TYPE *heW, uint *halo_vertices, uint *halo_vertices_keys, uint *parts, uint vertices);
-__global__ void computeFaceGradientsKernel(uint *fv, FN_TYPE *nFn, FN_TYPE *cFn, float3 *grads, float3 *nfGrads, float3 *cfGrads, uint *halo_faces, uint *halo_faces_keys, uint *parts, uint faces);
-__global__ void computeVertexGradientsKernel(float3 *nfGrads, float3 *cfGrads, float3 *nvGrads, float3 *cvGrads, uint *t, uint *faces, FN_TYPE *fW, uint *parts, uint vertices);
+__global__ void computeKernel(FN_TYPE *nFn, FN_TYPE *cFn, FN_TYPE *nLap, FN_TYPE *cLap, uint *t, uint *nbr, FN_TYPE *vtxW, FN_TYPE *heW, uint *halo_vertices, uint *halo_vertices_keys, uint *vertex_parts, uint *fv, float3 *grads, float3 *nfGrads, float3 *cfGrads, uint *halo_faces, uint *halo_faces_keys, uint *face_parts, float3 *nvGrads, float3 *cvGrads, uint *f, uint *faces, FN_TYPE *fW);
+__global__ void computeLaplacianKernel(FN_TYPE *nFn, FN_TYPE *cFn, FN_TYPE *nLap, FN_TYPE *cLap, uint *t, uint *nbr, FN_TYPE *vtxW, FN_TYPE *heW, uint *halo_vertices, uint *halo_vertices_keys, uint *parts);
+__global__ void computeFaceGradientsKernel(uint *fv, FN_TYPE *nFn, FN_TYPE *cFn, float3 *grads, float3 *nfGrads, float3 *cfGrads, uint *halo_faces, uint *halo_faces_keys, uint *parts);
+__global__ void computeVertexGradientsKernel(float3 *nfGrads, float3 *cfGrads, float3 *nvGrads, float3 *cvGrads, uint *t, uint *faces, FN_TYPE *fW, uint *parts);
 __global__ void updateKernel(FN_TYPE *nFn, FN_TYPE *cFn, FN_TYPE *nLap, FN_TYPE *cLap, float3 *nVtxGrad, float3 *cVtxGrad, double dt, uint vertices);
 
-extern "C" void computeLaplacian(FN_TYPE *nFn, FN_TYPE *cFn, FN_TYPE *nLap, FN_TYPE *cLap, uint *t, uint *nbr, FN_TYPE *vtxW, FN_TYPE *heW, uint *halo_vertices, uint *halo_vertices_keys, uint* parts, uint vertices, uint blocks, uint threads) {
+extern "C" void compute(FN_TYPE *nFn, FN_TYPE *cFn, FN_TYPE *nLap, FN_TYPE *cLap, uint *t, uint *nbr, FN_TYPE *vtxW, FN_TYPE *heW, uint *halo_vertices, uint *halo_vertices_keys, uint *vertex_parts, uint *fv, float3 *grads, float3 *nfGrads, float3 *cfGrads, uint *halo_faces, uint *halo_faces_keys, uint *face_parts, float3 *nvGrads, float3 *cvGrads, uint *f, uint *faces, FN_TYPE *fW, uint blocks, uint threads) {
 	dim3 block(threads, 1, 1);
 	dim3 grid(blocks, 1, 1);
-	computeLaplacianKernel<<<grid, block>>>(nFn, cFn, nLap, cLap, t, nbr, vtxW, heW, halo_vertices, halo_vertices_keys, parts, vertices);
+	computeKernel<<<grid, block>>>(nFn, cFn, nLap, cLap, t, nbr, vtxW, heW, halo_vertices, halo_vertices_keys, vertex_parts, fv, grads, nfGrads, cfGrads, halo_faces, halo_faces_keys, face_parts, nvGrads, cvGrads, f, faces, fW);
+}
+__global__ void computeKernel(FN_TYPE *nFn, FN_TYPE *cFn, FN_TYPE *nLap, FN_TYPE *cLap, uint *t, uint *nbr, FN_TYPE *vtxW, FN_TYPE *heW, uint *halo_vertices, uint *halo_vertices_keys, uint *vertex_parts, uint *fv, float3 *grads, float3 *nfGrads, float3 *cfGrads, uint *halo_faces, uint *halo_faces_keys, uint *face_parts, float3 *nvGrads, float3 *cvGrads, uint *f, uint *faces, FN_TYPE *fW){
+	int i = face_parts[blockIdx.x] + threadIdx.x;
+
+	if (i >= face_parts[blockIdx.x+1]) {
+
+		i = i - face_parts[blockIdx.x+1] + halo_faces_keys[blockIdx.x];
+		if (i >= halo_faces_keys[blockIdx.x+1])
+			return;
+		i = halo_faces[i];
+	}
+
+	FN_TYPE nv1 = nFn[fv[i*3+2]];
+	FN_TYPE nv12 = nFn[fv[i*3]] - nv1;
+	FN_TYPE nv13 = nFn[fv[i*3+1]] - nv1;
+	FN_TYPE cv1 = cFn[fv[i*3+2]];
+	FN_TYPE cv12 = cFn[fv[i*3]] - cv1;
+	FN_TYPE cv13 = cFn[fv[i*3+1]] - cv1;
+
+	float3 grad12 = grads[i*2];
+	float3 grad13 = grads[i*2+1];
+
+	nfGrads[i] = grad12*nv12 + grad13*nv13;
+	cfGrads[i] = grad12*cv12 + grad13*cv13;
+
+	syncthreads();
+
+	i = vertex_parts[blockIdx.x] + threadIdx.x;
+
+	if (i >= vertex_parts[blockIdx.x+1]) {
+		i = i - vertex_parts[blockIdx.x+1] + halo_vertices_keys[blockIdx.x];
+		if (i >= halo_vertices_keys[blockIdx.x+1])
+			return;
+		i = halo_vertices[i];
+	}
+
+	FN_TYPE vW = vtxW[i];
+	FN_TYPE n = nFn[i]*vW;
+	FN_TYPE c = cFn[i]*vW;
+
+	int end = t[i+1];
+	for (int j = t[i]; j < end; j++) {
+		int nIdx = nbr[j];
+		FN_TYPE hW = heW[j];
+		n += nFn[nIdx]*hW;
+		c += cFn[nIdx]*hW;
+	}
+	nLap[i] = n;
+	cLap[i] = c;
+
+	syncthreads();
+
+	i = vertex_parts[blockIdx.x] + threadIdx.x;
+
+	if (i >= vertex_parts[blockIdx.x+1]) return;
+
+	float3 ng = make_float3(0.0f, 0.0f, 0.0f);
+	float3 cg = make_float3(0.0f, 0.0f, 0.0f);
+	FN_TYPE wg = 0;
+
+	end = f[i+1];
+	for (int j = f[i]; j < end; j++) {
+		uint face = faces[j];
+		FN_TYPE w = fW[j];
+		ng += w*nfGrads[face];
+		cg += w*cfGrads[face];
+		wg += w;
+	}
+	if (wg > 0) {
+		nvGrads[i] = ng/wg;
+		cvGrads[i] = cg/wg;
+	} else {
+		nvGrads[i] = make_float3(0.0f, 0.0f, 0.0f);
+		cvGrads[i] = make_float3(0.0f, 0.0f, 0.0f);
+	}
 }
 
-__global__ void computeLaplacianKernel(FN_TYPE *nFn, FN_TYPE *cFn, FN_TYPE *nLap, FN_TYPE *cLap, uint *t, uint *nbr, FN_TYPE *vtxW, FN_TYPE *heW, uint *halo_vertices, uint *halo_vertices_keys, uint *parts, uint vertices){
+extern "C" void computeLaplacian(FN_TYPE *nFn, FN_TYPE *cFn, FN_TYPE *nLap, FN_TYPE *cLap, uint *t, uint *nbr, FN_TYPE *vtxW, FN_TYPE *heW, uint *halo_vertices, uint *halo_vertices_keys, uint* parts, uint blocks, uint threads) {
+	dim3 block(threads, 1, 1);
+	dim3 grid(blocks, 1, 1);
+	computeLaplacianKernel<<<grid, block>>>(nFn, cFn, nLap, cLap, t, nbr, vtxW, heW, halo_vertices, halo_vertices_keys, parts);
+}
+
+__global__ void computeLaplacianKernel(FN_TYPE *nFn, FN_TYPE *cFn, FN_TYPE *nLap, FN_TYPE *cLap, uint *t, uint *nbr, FN_TYPE *vtxW, FN_TYPE *heW, uint *halo_vertices, uint *halo_vertices_keys, uint *parts){
 	int i = parts[blockIdx.x] + threadIdx.x;
 
 	if (i >= parts[blockIdx.x+1]) {
@@ -46,13 +128,13 @@ __global__ void computeLaplacianKernel(FN_TYPE *nFn, FN_TYPE *cFn, FN_TYPE *nLap
 	cLap[i] = c;
 }
 
-extern "C" void computeFaceGradients(uint *fv, FN_TYPE *nFn, FN_TYPE *cFn, float3 *grads, float3 *nfGrads, float3 *cfGrads, uint *halo_faces, uint *halo_faces_keys, uint *parts, uint faces, uint blocks, uint threads) {
+extern "C" void computeFaceGradients(uint *fv, FN_TYPE *nFn, FN_TYPE *cFn, float3 *grads, float3 *nfGrads, float3 *cfGrads, uint *halo_faces, uint *halo_faces_keys, uint *parts, uint blocks, uint threads) {
 	dim3 block(threads, 1, 1);
 	dim3 grid(blocks, 1, 1);
-	computeFaceGradientsKernel<<<grid, block>>>(fv, nFn, cFn, grads, nfGrads, cfGrads, halo_faces, halo_faces_keys, parts, faces);
+	computeFaceGradientsKernel<<<grid, block>>>(fv, nFn, cFn, grads, nfGrads, cfGrads, halo_faces, halo_faces_keys, parts);
 }
 
-__global__ void computeFaceGradientsKernel(uint *fv, FN_TYPE *nFn, FN_TYPE *cFn, float3 *grads, float3 *nfGrads, float3 *cfGrads, uint *halo_faces, uint *halo_faces_keys, uint *parts, uint faces) {
+__global__ void computeFaceGradientsKernel(uint *fv, FN_TYPE *nFn, FN_TYPE *cFn, float3 *grads, float3 *nfGrads, float3 *cfGrads, uint *halo_faces, uint *halo_faces_keys, uint *parts) {
 	int i = parts[blockIdx.x] + threadIdx.x;
 
 	if (i >= parts[blockIdx.x+1]) {
@@ -77,13 +159,13 @@ __global__ void computeFaceGradientsKernel(uint *fv, FN_TYPE *nFn, FN_TYPE *cFn,
 	cfGrads[i] = grad12*cv12 + grad13*cv13;
 }
 
-extern "C" void computeVertexGradients(float3 *nfGrads, float3 *cfGrads, float3 *nvGrads, float3 *cvGrads, uint *t, uint *faces, FN_TYPE *fW, uint* parts, uint vertices, uint blocks, uint threads) {
+extern "C" void computeVertexGradients(float3 *nfGrads, float3 *cfGrads, float3 *nvGrads, float3 *cvGrads, uint *t, uint *faces, FN_TYPE *fW, uint* parts, uint blocks, uint threads) {
 	dim3 block(threads, 1, 1);
 	dim3 grid(blocks, 1, 1);
-	computeVertexGradientsKernel<<<grid, block>>>(nfGrads, cfGrads, nvGrads, cvGrads, t, faces, fW, parts, vertices);
+	computeVertexGradientsKernel<<<grid, block>>>(nfGrads, cfGrads, nvGrads, cvGrads, t, faces, fW, parts);
 }
 
-__global__ void computeVertexGradientsKernel(float3 *nfGrads, float3 *cfGrads, float3 *nvGrads, float3 *cvGrads, uint *t, uint *faces, FN_TYPE *fW, uint *parts, uint vertices) {
+__global__ void computeVertexGradientsKernel(float3 *nfGrads, float3 *cfGrads, float3 *nvGrads, float3 *cvGrads, uint *t, uint *faces, FN_TYPE *fW, uint *parts) {
 	int i = parts[blockIdx.x] + threadIdx.x;
 
 	if (i >= parts[blockIdx.x+1]) return;
