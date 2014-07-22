@@ -87,8 +87,8 @@ uint *halo_faces_keys;
 uint *halo_vertices_keys;
 
 //batch configuration
-int start_n = 140; // number of partitions to start with
-int end_n = 160; // number of partitions to end with
+int start_n = 97; // number of partitions to start with
+int end_n = 97; // number of partitions to end with
 
 using namespace OpenMesh;
 
@@ -408,8 +408,10 @@ double GPUrun(int n) {
 	for(int i = 0; i < numVtx; i++) {
 		sum_error_n += fabs(nFn[i]-test_nFn[i]);
 		sum_error_c += fabs(cFn[i]-test_cFn[i]);
-		if (fabs(nFn[i]-test_nFn[i]) > 0 || fabs(cFn[i]-test_cFn[i]) > 0)
+		if (fabs(nFn[i]-test_nFn[i]) > 0 || fabs(cFn[i]-test_cFn[i]) > 0) {
 			error_counter++;
+			//printf("Vertex %d should be %f but is %f\n", i, test_nFn[i], nFn[i]);
+		}
 	}
 
 
