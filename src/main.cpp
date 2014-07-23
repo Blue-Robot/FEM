@@ -55,6 +55,7 @@ double dt;
 
 // General
 string file_name;
+bool verbose = false;
 
 // OpenMesh
 SimpleTriMesh originalMesh;
@@ -87,8 +88,8 @@ uint *halo_faces_keys;
 uint *halo_vertices_keys;
 
 //batch configuration
-int start_n = 97; // number of partitions to start with
-int end_n = 97; // number of partitions to end with
+int start_n = 39; // number of partitions to start with
+int end_n = 39; // number of partitions to end with
 
 using namespace OpenMesh;
 
@@ -105,6 +106,9 @@ void CPUrun(FN_TYPE *test_nFn, FN_TYPE *test_cFn);
 
 int main(int argc, char **argv) {
 	file_name = argv[1];
+
+	if (!verbose)
+		std::cout.rdbuf(NULL);
 
 	initializeCUDA();
 	loadMesh();
@@ -124,7 +128,6 @@ int main(int argc, char **argv) {
 	}
 	printf("Best time with %d partitions is %f!\n", best_n, best_time);
 
-	printf("It worked!\n");
 	return 0;
 }
 void loadMesh() {
@@ -162,7 +165,7 @@ void initializeCUDA() {
 	checkCudaErrors(cudaSetDevice(gpuGetMaxGflopsDeviceId()));
 
 	//checkCudaErrors(cudaDeviceSetSharedMemConfig(cudaSharedMemBankSizeFourByte));
-	//checkCudaErrors(cudaDeviceSetCacheConfig(cudaFuncCachePreferEqual));
+	//checkCudaErrors(cudaDeviceSetCacheConfig(cudaFuncCachePreferL1));
 }
 
 void initializeGPUData(int n) {
@@ -293,11 +296,11 @@ double GPUrun(int n) {
 	}
 
 	if(max_size_n > 1024) {
-		printf("ERROR: Too many nodes per Block! (%d %d)\n", n, max_size_n);
+		fprintf(stderr, "ERROR: Too many nodes per Block! (%d %d)\n", n, max_size_n);
 		return -1.0;
 	}
 	if(max_size_e > 1024) {
-		printf("ERROR: Too many elements per Block! (%d %d)\n", n, max_size_e);
+		fprintf(stderr, "ERROR: Too many elements per Block! (%d %d)\n", n, max_size_e);
 		return -1.0;
 	}
 	int max_size = std::max(max_size_n, max_size_e);
@@ -382,8 +385,10 @@ double GPUrun(int n) {
 	checkCudaErrors(cudaMemcpy(dev_vertexFaces, vertexFaces, sizeof(uint)*numFaces*3, cudaMemcpyHostToDevice));
 	checkCudaErrors(cudaMemcpy(dev_faceWeights, faceWeights, sizeof(FN_TYPE)*numFaces*3, cudaMemcpyHostToDevice));
 
+	cudaProfilerStart();
 	compute(dev_nFn, dev_cFn, dev_nLap, dev_cLap, dev_nbrTracker, dev_nbr, dev_vtxW, dev_heWeights, dev_halo_vertices, dev_halo_vertices_keys, dev_parts_n, dev_faceVertices, dev_heGradients, dev_nFaceGradients, dev_cFaceGradients, dev_halo_faces, dev_halo_faces_keys, dev_parts_e, dev_nVertexGradients, dev_cVertexGradients, dev_faceTracker, dev_vertexFaces, dev_faceWeights, n, threads);
-//	computeLaplacian(dev_nFn, dev_cFn, dev_nLap, dev_cLap, dev_nbrTracker, dev_nbr, dev_vtxW, dev_heWeights, dev_halo_vertices, dev_halo_vertices_keys, dev_parts_n, n, threads_n);
+	cudaProfilerStop();
+	//	computeLaplacian(dev_nFn, dev_cFn, dev_nLap, dev_cLap, dev_nbrTracker, dev_nbr, dev_vtxW, dev_heWeights, dev_halo_vertices, dev_halo_vertices_keys, dev_parts_n, n, threads_n);
 //	computeFaceGradients(dev_faceVertices, dev_nFn, dev_cFn, dev_heGradients, dev_nFaceGradients, dev_cFaceGradients, dev_halo_faces, dev_halo_faces_keys, dev_parts_e, n, threads_e);
 //	computeVertexGradients(dev_nFaceGradients, dev_cFaceGradients, dev_nVertexGradients, dev_cVertexGradients, dev_faceTracker, dev_vertexFaces, dev_faceWeights, dev_parts_n, n, threads_n);
 
@@ -414,8 +419,8 @@ double GPUrun(int n) {
 		}
 	}
 
-
-	printf("Sum / Mean error for n: %f / %f and for c: %f / %f. Number of errors in total: %d\n", sum_error_n, sum_error_n/numVtx, sum_error_c, sum_error_c/numVtx, error_counter);
+	if (verbose)
+		printf("Sum / Mean error for n: %f / %f and for c: %f / %f. Number of errors in total: %d\n", sum_error_n, sum_error_n/numVtx, sum_error_c, sum_error_c/numVtx, error_counter);
 
 
 	// Speed Test
@@ -444,9 +449,12 @@ double GPUrun(int n) {
 			best_configuartion = th;
 		}
 	}
-
-	printf("Time needed for %d iterations: %f ms with %d threads each and %d partitions\n", maxIt, best_time, best_configuartion, n);
-	printf("Average time needed per Iteration: %f us\n", 1000*best_time/maxIt);
+	if (verbose) {
+		printf("Time needed for %d iterations: %f ms with %d threads each and %d partitions\n", maxIt, best_time, best_configuartion, n);
+		printf("Average time needed per Iteration: %f us\n", 1000*best_time/maxIt);
+	} else {
+		printf("Errors: %d, Partitions: %d, Threads: %d, Time: %f\n", error_counter, n, threads, 1000*best_time/maxIt);
+	}
 
 	// Free Data
 	checkCudaErrors(cudaFree(dev_nFn));

@@ -22,7 +22,7 @@ extern "C" void compute(FN_TYPE *nFn, FN_TYPE *cFn, FN_TYPE *nLap, FN_TYPE *cLap
 	computeKernel<<<grid, block>>>(nFn, cFn, nLap, cLap, t, nbr, vtxW, heW, vertex_parts, fv, grads, nfGrads, cfGrads, halo_faces, halo_faces_keys, face_parts, nvGrads, cvGrads, f, faces, fW);
 }
 __global__ void computeKernel(FN_TYPE *nFn, FN_TYPE *cFn, FN_TYPE *nLap, FN_TYPE *cLap, uint *t, uint *nbr, FN_TYPE *vtxW, FN_TYPE *heW, uint *vertex_parts, uint *fv, float3 *grads, float3 *nfGrads, float3 *cfGrads, uint *halo_faces, uint *halo_faces_keys, uint *face_parts, float3 *nvGrads, float3 *cvGrads, uint *f, uint *faces, FN_TYPE *fW){
-	// face gradients
+	/* face gradients ********************************/
 	int i = face_parts[blockIdx.x] + threadIdx.x;
 
 	if (i >= face_parts[blockIdx.x+1]) {
@@ -46,31 +46,20 @@ __global__ void computeKernel(FN_TYPE *nFn, FN_TYPE *cFn, FN_TYPE *nLap, FN_TYPE
 	nfGrads[i] = grad12*nv12 + grad13*nv13;
 	cfGrads[i] = grad12*cv12 + grad13*cv13;
 
-	// laplacian
+	__syncthreads();
+
+	// Adjust i
 	i = vertex_parts[blockIdx.x] + threadIdx.x;
 
+	// Kill unnecessary threads
 	if (i >= vertex_parts[blockIdx.x+1]) return;
 
-	FN_TYPE vW = vtxW[i];
-	FN_TYPE n = nFn[i]*vW;
-	FN_TYPE c = cFn[i]*vW;
-
-	int end = t[i+1];
-	for (int j = t[i]; j < end; j++) {
-		int nIdx = nbr[j];
-		FN_TYPE hW = heW[j];
-		n += nFn[nIdx]*hW;
-		c += cFn[nIdx]*hW;
-	}
-	nLap[i] = n;
-	cLap[i] = c;
-
-	// vertex gradients
+	/* vertex gradients ********************************/
 	float3 ng = make_float3(0.0f, 0.0f, 0.0f);
 	float3 cg = make_float3(0.0f, 0.0f, 0.0f);
 	FN_TYPE wg = 0;
 
-	end = f[i+1];
+	int end = f[i+1];
 
 	for (int j = f[i]; j < end; j++) {
 		uint face = faces[j];
@@ -86,6 +75,21 @@ __global__ void computeKernel(FN_TYPE *nFn, FN_TYPE *cFn, FN_TYPE *nLap, FN_TYPE
 		nvGrads[i] = make_float3(0.0f, 0.0f, 0.0f);
 		cvGrads[i] = make_float3(0.0f, 0.0f, 0.0f);
 	}
+
+	/* laplacian ******************************************/
+	FN_TYPE vW = vtxW[i];
+	FN_TYPE n = nFn[i]*vW;
+	FN_TYPE c = cFn[i]*vW;
+
+	end = t[i+1];
+	for (int j = t[i]; j < end; j++) {
+		int nIdx = nbr[j];
+		FN_TYPE hW = heW[j];
+		n += nFn[nIdx]*hW;
+		c += cFn[nIdx]*hW;
+	}
+	nLap[i] = n;
+	cLap[i] = c;
 }
 
 extern "C" void computeLaplacian(FN_TYPE *nFn, FN_TYPE *cFn, FN_TYPE *nLap, FN_TYPE *cLap, uint *t, uint *nbr, FN_TYPE *vtxW, FN_TYPE *heW, uint *halo_vertices, uint *halo_vertices_keys, uint* parts, uint blocks, uint threads) {
