@@ -1,5 +1,23 @@
 #include "common.h"
 
+extern "C" void computeLaplacianAndFaceGradients (
+		FN_TYPE *nFn,
+		FN_TYPE *cFn,
+		FN_TYPE *nLap,
+		FN_TYPE *cLap,
+		uint *fv,
+		uint *t,
+		uint *nbr,
+		FN_TYPE *vtxW,
+		FN_TYPE *heW,
+		float3 *grads,
+		float3 *nfGrads,
+		float3 *cfGrads,
+		uint vertices,
+		uint faces,
+		uint threads
+		);
+
 extern "C" void computeLaplacian(
 		FN_TYPE *nFn,
 		FN_TYPE *cFn,

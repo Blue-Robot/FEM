@@ -56,6 +56,7 @@ double dt;
 // General
 string file_name;
 bool verbose = false;
+bool debug = false;
 
 // OpenMesh
 SimpleTriMesh originalMesh;
@@ -106,6 +107,8 @@ void CPUrun(FN_TYPE *test_nFn, FN_TYPE *test_cFn);
 
 int main(int argc, char **argv) {
 	file_name = argv[1];
+	if (argc >=3 && !strcmp(argv[2], "-d"))
+		debug = true;
 
 	if (!verbose)
 		std::cout.rdbuf(NULL);
@@ -126,7 +129,8 @@ int main(int argc, char **argv) {
 		}
 
 	}
-	printf("Best time with %d partitions is %.1f!\n", best_n, best_time);
+	if (!debug)
+		printf("Best time with %d partitions is %.1f!\n", best_n, best_time);
 
 	return 0;
 }
@@ -294,14 +298,14 @@ double GPUrun(int n) {
 		max_size_e = std::max(max_size_e, size_e);
 	}
 
-	if(max_size_n > 1024) {
-		printf("ERROR: Too many nodes per Block! (%d %d)\n", n, max_size_n);
-		return -1.0;
-	}
-	if(max_size_e > 1024) {
-		printf("ERROR: Too many elements per Block! (%d %d)\n", n, max_size_e);
-		return -1.0;
-	}
+//	if(max_size_n > 1024) {
+//		printf("ERROR: Too many nodes per Block! (%d %d)\n", n, max_size_n);
+//		return -1.0;
+//	}
+//	if(max_size_e > 1024) {
+//		printf("ERROR: Too many elements per Block! (%d %d)\n", n, max_size_e);
+//		return -1.0;
+//	}
 
 	int threads_n = ((max_size_n + 32 - 1) / 32) * 32;
 	int threads_e = ((max_size_e + 32 - 1) / 32) * 32;
@@ -382,15 +386,17 @@ double GPUrun(int n) {
 	checkCudaErrors(cudaMemcpy(dev_vertexFaces, vertexFaces, sizeof(uint)*numFaces*3, cudaMemcpyHostToDevice));
 	checkCudaErrors(cudaMemcpy(dev_faceWeights, faceWeights, sizeof(FN_TYPE)*numFaces*3, cudaMemcpyHostToDevice));
 
-	computeLaplacian(dev_nFn, dev_cFn, dev_nLap, dev_cLap, dev_nbrTracker, dev_nbr, dev_vtxW, dev_heWeights, dev_halo_vertices, dev_halo_vertices_keys, dev_parts_n, numVtx, n, 64);
-	computeFaceGradients(dev_faceVertices, dev_nFn, dev_cFn, dev_heGradients, dev_nFaceGradients, dev_cFaceGradients, dev_halo_faces, dev_halo_faces_keys, dev_parts_e, numFaces, n, 64);
-	computeVertexGradients(dev_nFaceGradients, dev_cFaceGradients, dev_nVertexGradients, dev_cVertexGradients, dev_faceTracker, dev_vertexFaces, dev_faceWeights, dev_parts_n, numVtx, n, 64);
+
+	cudaProfilerStart();
+	computeLaplacianAndFaceGradients(dev_nFn, dev_cFn, dev_nLap, dev_cLap, dev_faceVertices, dev_nbrTracker, dev_nbr, dev_vtxW, dev_heWeights, dev_heGradients, dev_nFaceGradients, dev_cFaceGradients, numVtx, numFaces, 160);
+	computeVertexGradients(dev_nFaceGradients, dev_cFaceGradients, dev_nVertexGradients, dev_cVertexGradients, dev_faceTracker, dev_vertexFaces, dev_faceWeights, dev_parts_n, numVtx, n, 160);
 
 	FN_TYPE *test_nFn = new FN_TYPE[numVtx];
 	FN_TYPE *test_cFn = new FN_TYPE[numVtx];
 	CPUrun(test_nFn, test_cFn);
 
-	update(dev_nFn, dev_cFn, dev_nLap, dev_cLap, dev_nVertexGradients, dev_cVertexGradients, dt, numVtx, 64);
+	update(dev_nFn, dev_cFn, dev_nLap, dev_cLap, dev_nVertexGradients, dev_cVertexGradients, dt, numVtx, 160);
+	cudaProfilerStop();
 
 	// Error Test
 	checkCudaErrors(cudaDeviceSynchronize());
@@ -412,9 +418,10 @@ double GPUrun(int n) {
 	}
 
 
-	if (verbose)
+	if (verbose || debug)
 		printf("Sum / Mean error for n: %f / %f and for c: %f / %f. Number of errors in total: %d\n", sum_error_n, sum_error_n/numVtx, sum_error_c, sum_error_c/numVtx, error_counter);
-
+	if(debug)
+		return 0;
 
 	// Speed Test
 	int maxIt = 1000;
@@ -429,8 +436,7 @@ double GPUrun(int n) {
 		cudaEventRecord(start, 0);
 
 		for (int i = 0; i < maxIt; i++) {
-			computeLaplacian(dev_nFn, dev_cFn, dev_nLap, dev_cLap, dev_nbrTracker, dev_nbr, dev_vtxW, dev_heWeights, dev_halo_vertices, dev_halo_vertices_keys, dev_parts_n, numVtx, n, th);
-			computeFaceGradients(dev_faceVertices, dev_nFn, dev_cFn, dev_heGradients, dev_nFaceGradients, dev_cFaceGradients, dev_halo_faces, dev_halo_faces_keys, dev_parts_e, numFaces, n, th);
+			computeLaplacianAndFaceGradients(dev_nFn, dev_cFn, dev_nLap, dev_cLap, dev_faceVertices, dev_nbrTracker, dev_nbr, dev_vtxW, dev_heWeights, dev_heGradients, dev_nFaceGradients, dev_cFaceGradients, numVtx, numFaces, th);
 			computeVertexGradients(dev_nFaceGradients, dev_cFaceGradients, dev_nVertexGradients, dev_cVertexGradients, dev_faceTracker, dev_vertexFaces, dev_faceWeights, dev_parts_n, numVtx, n, th);
 			update(dev_nFn, dev_cFn, dev_nLap, dev_cLap, dev_nVertexGradients, dev_cVertexGradients, dt, numVtx, th);
 		}
