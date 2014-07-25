@@ -55,7 +55,6 @@ double dt;
 
 // General
 string file_name;
-bool verbose = false;
 
 // OpenMesh
 SimpleTriMesh originalMesh;
@@ -107,9 +106,6 @@ void CPUrun(FN_TYPE *test_nFn, FN_TYPE *test_cFn);
 int main(int argc, char **argv) {
 	file_name = argv[1];
 
-	if (!verbose)
-		std::cout.rdbuf(NULL);
-
 	initializeCUDA();
 	loadMesh();
 
@@ -126,8 +122,9 @@ int main(int argc, char **argv) {
 		}
 
 	}
-	printf("Best time with %d partitions is %.1f!\n", best_n, best_time);
+	printf("Best time with %d partitions is %f!\n", best_n, best_time);
 
+	printf("It worked!\n");
 	return 0;
 }
 void loadMesh() {
@@ -412,8 +409,7 @@ double GPUrun(int n) {
 	}
 
 
-	if (verbose)
-		printf("Sum / Mean error for n: %f / %f and for c: %f / %f. Number of errors in total: %d\n", sum_error_n, sum_error_n/numVtx, sum_error_c, sum_error_c/numVtx, error_counter);
+	printf("Sum / Mean error for n: %f / %f and for c: %f / %f. Number of errors in total: %d\n", sum_error_n, sum_error_n/numVtx, sum_error_c, sum_error_c/numVtx, error_counter);
 
 
 	// Speed Test
@@ -444,12 +440,8 @@ double GPUrun(int n) {
 		}
 	}
 
-	if (verbose) {
-		printf("Time needed for %d iterations: %f ms with %d threads each and %d partitions\n", maxIt, best_time, best_configuartion, n);
-		printf("Average time needed per Iteration: %f us\n", 1000*best_time/maxIt);
-	} else {
-		printf("Errors: %d, Partitions: %d, Threads: %d, Time: %f\n", error_counter, n, best_configuartion, 1000*best_time/maxIt);
-	}
+	printf("Time needed for %d iterations: %f ms with %d threads each and %d partitions\n", maxIt, best_time, best_configuartion, n);
+	printf("Average time needed per Iteration: %f us\n", 1000*best_time/maxIt);
 
 	// Free Data
 	checkCudaErrors(cudaFree(dev_nFn));
