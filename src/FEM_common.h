@@ -1,8 +1,10 @@
 #include "common.h"
 
 extern "C" void computeLaplacianAndFaceGradients (
-		FN_TYPE *nFn,
-		FN_TYPE *cFn,
+		FN_TYPE *nFn_src,
+		FN_TYPE *cFn_src,
+		FN_TYPE *nFn_dst,
+		FN_TYPE *cFn_dst,
 		FN_TYPE *nLap,
 		FN_TYPE *cLap,
 		uint *fv,
@@ -23,7 +25,8 @@ extern "C" void computeLaplacianAndFaceGradients (
 		uint *halo_faces,
 		uint *halo_faces_keys,
 		uint blocks,
-		uint threads
+		uint threads,
+		double dt
 		);
 
 extern "C" void computeLaplacian(

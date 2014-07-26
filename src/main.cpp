@@ -393,10 +393,10 @@ double GPUrun(int n) {
 
 
 	cudaProfilerStart();
-	computeLaplacianAndFaceGradients(dev_nFn_one, dev_cFn_one, dev_nLap, dev_cLap, dev_faceVertices, dev_nbrTracker, dev_nbr, dev_vtxW, dev_heWeights, dev_heGradients, dev_nFaceGradients, dev_cFaceGradients, dev_nVertexGradients, dev_cVertexGradients, dev_faceTracker, dev_vertexFaces, dev_faceWeights, dev_parts_n, dev_parts_e, dev_halo_faces, dev_halo_faces_keys, n, threads);
-	update(dev_nFn_one, dev_cFn_one, dev_nFn_two, dev_cFn_two, dev_nLap, dev_cLap, dev_nVertexGradients, dev_cVertexGradients, dt, numVtx, 160);
-	computeLaplacianAndFaceGradients(dev_nFn_two, dev_cFn_two, dev_nLap, dev_cLap, dev_faceVertices, dev_nbrTracker, dev_nbr, dev_vtxW, dev_heWeights, dev_heGradients, dev_nFaceGradients, dev_cFaceGradients, dev_nVertexGradients, dev_cVertexGradients, dev_faceTracker, dev_vertexFaces, dev_faceWeights, dev_parts_n, dev_parts_e, dev_halo_faces, dev_halo_faces_keys, n, threads);
-	update(dev_nFn_two, dev_cFn_two, dev_nFn_one, dev_cFn_one, dev_nLap, dev_cLap, dev_nVertexGradients, dev_cVertexGradients, dt, numVtx, 160);
+	computeLaplacianAndFaceGradients(dev_nFn_one, dev_cFn_one, dev_nFn_two, dev_cFn_two, dev_nLap, dev_cLap, dev_faceVertices, dev_nbrTracker, dev_nbr, dev_vtxW, dev_heWeights, dev_heGradients, dev_nFaceGradients, dev_cFaceGradients, dev_nVertexGradients, dev_cVertexGradients, dev_faceTracker, dev_vertexFaces, dev_faceWeights, dev_parts_n, dev_parts_e, dev_halo_faces, dev_halo_faces_keys, n, threads, dt);
+	//update(dev_nFn_one, dev_cFn_one, dev_nFn_two, dev_cFn_two, dev_nLap, dev_cLap, dev_nVertexGradients, dev_cVertexGradients, dt, numVtx, 160);
+	computeLaplacianAndFaceGradients(dev_nFn_two, dev_cFn_two, dev_nFn_one, dev_cFn_one, dev_nLap, dev_cLap, dev_faceVertices, dev_nbrTracker, dev_nbr, dev_vtxW, dev_heWeights, dev_heGradients, dev_nFaceGradients, dev_cFaceGradients, dev_nVertexGradients, dev_cVertexGradients, dev_faceTracker, dev_vertexFaces, dev_faceWeights, dev_parts_n, dev_parts_e, dev_halo_faces, dev_halo_faces_keys, n, threads, dt);
+	//update(dev_nFn_two, dev_cFn_two, dev_nFn_one, dev_cFn_one, dev_nLap, dev_cLap, dev_nVertexGradients, dev_cVertexGradients, dt, numVtx, 160);
 	cudaProfilerStop();
 
 
@@ -443,10 +443,10 @@ double GPUrun(int n) {
 		cudaEventRecord(start, 0);
 
 		for (int i = 0; i < maxIt; i++) {
-			computeLaplacianAndFaceGradients(dev_nFn_one, dev_cFn_one, dev_nLap, dev_cLap, dev_faceVertices, dev_nbrTracker, dev_nbr, dev_vtxW, dev_heWeights, dev_heGradients, dev_nFaceGradients, dev_cFaceGradients, dev_nVertexGradients, dev_cVertexGradients, dev_faceTracker, dev_vertexFaces, dev_faceWeights, dev_parts_n, dev_parts_e, dev_halo_faces, dev_halo_faces_keys, n, threads);
-			update(dev_nFn_one, dev_cFn_one, dev_nFn_two, dev_cFn_two, dev_nLap, dev_cLap, dev_nVertexGradients, dev_cVertexGradients, dt, numVtx, th);
-			computeLaplacianAndFaceGradients(dev_nFn_two, dev_cFn_two, dev_nLap, dev_cLap, dev_faceVertices, dev_nbrTracker, dev_nbr, dev_vtxW, dev_heWeights, dev_heGradients, dev_nFaceGradients, dev_cFaceGradients, dev_nVertexGradients, dev_cVertexGradients, dev_faceTracker, dev_vertexFaces, dev_faceWeights, dev_parts_n, dev_parts_e, dev_halo_faces, dev_halo_faces_keys, n, threads);
-			update(dev_nFn_two, dev_cFn_two, dev_nFn_one, dev_cFn_one, dev_nLap, dev_cLap, dev_nVertexGradients, dev_cVertexGradients, dt, numVtx, th);
+			computeLaplacianAndFaceGradients(dev_nFn_one, dev_cFn_one, dev_nFn_two, dev_cFn_two, dev_nLap, dev_cLap, dev_faceVertices, dev_nbrTracker, dev_nbr, dev_vtxW, dev_heWeights, dev_heGradients, dev_nFaceGradients, dev_cFaceGradients, dev_nVertexGradients, dev_cVertexGradients, dev_faceTracker, dev_vertexFaces, dev_faceWeights, dev_parts_n, dev_parts_e, dev_halo_faces, dev_halo_faces_keys, n, threads, dt);
+			//update(dev_nFn_one, dev_cFn_one, dev_nFn_two, dev_cFn_two, dev_nLap, dev_cLap, dev_nVertexGradients, dev_cVertexGradients, dt, numVtx, th);
+			computeLaplacianAndFaceGradients(dev_nFn_two, dev_cFn_two, dev_nFn_one, dev_cFn_one, dev_nLap, dev_cLap, dev_faceVertices, dev_nbrTracker, dev_nbr, dev_vtxW, dev_heWeights, dev_heGradients, dev_nFaceGradients, dev_cFaceGradients, dev_nVertexGradients, dev_cVertexGradients, dev_faceTracker, dev_vertexFaces, dev_faceWeights, dev_parts_n, dev_parts_e, dev_halo_faces, dev_halo_faces_keys, n, threads, dt);
+			//update(dev_nFn_two, dev_cFn_two, dev_nFn_one, dev_cFn_one, dev_nLap, dev_cLap, dev_nVertexGradients, dev_cVertexGradients, dt, numVtx, th);
 		}
 
 		cudaEventRecord(stop, 0);
