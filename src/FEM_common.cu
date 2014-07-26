@@ -27,6 +27,7 @@ __global__ void computeLaplacianAndFaceGradientsKernel(FN_TYPE *nFn,
 		float3 *cfGrads, float3 *nvGrads, float3 *cvGrads, uint *f, uint *faces,
 		FN_TYPE *fW, uint *vertex_parts, uint *face_parts, uint *halo_faces,
 		uint *halo_faces_keys) {
+
 	/* face gradients ********************************/
 	int i = face_parts[blockIdx.x] + threadIdx.x;
 
@@ -53,10 +54,10 @@ __global__ void computeLaplacianAndFaceGradientsKernel(FN_TYPE *nFn,
 
 	__syncthreads();
 
-// Adjust i
+	// Adjust i
 	i = vertex_parts[blockIdx.x] + threadIdx.x;
 
-// Kill unnecessary threads
+	// Kill unnecessary threads
 	if (i >= vertex_parts[blockIdx.x + 1])
 		return;
 

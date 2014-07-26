@@ -102,7 +102,7 @@ void initializeData(int n);
 void initializeGPUData(int n);
 
 double GPUrun(int n);
-void CPUrun(FN_TYPE *test_nFn, FN_TYPE *test_cFn);
+void CPUrun(FN_TYPE *test_nFn, FN_TYPE *test_cFn, int num_steps);
 
 
 int main(int argc, char **argv) {
@@ -390,13 +390,9 @@ double GPUrun(int n) {
 
 	cudaProfilerStart();
 	computeLaplacianAndFaceGradients(dev_nFn, dev_cFn, dev_nLap, dev_cLap, dev_faceVertices, dev_nbrTracker, dev_nbr, dev_vtxW, dev_heWeights, dev_heGradients, dev_nFaceGradients, dev_cFaceGradients, dev_nVertexGradients, dev_cVertexGradients, dev_faceTracker, dev_vertexFaces, dev_faceWeights, dev_parts_n, dev_parts_e, dev_halo_faces, dev_halo_faces_keys, n, threads);
-
-	FN_TYPE *test_nFn = new FN_TYPE[numVtx];
-	FN_TYPE *test_cFn = new FN_TYPE[numVtx];
-	CPUrun(test_nFn, test_cFn);
-
 	update(dev_nFn, dev_cFn, dev_nLap, dev_cLap, dev_nVertexGradients, dev_cVertexGradients, dt, numVtx, 160);
 	cudaProfilerStop();
+
 
 	// Error Test
 	checkCudaErrors(cudaDeviceSynchronize());
@@ -404,10 +400,14 @@ double GPUrun(int n) {
 	if (err != 0)
 		fprintf(stderr, "%s\n", cudaGetErrorString(err));
 
+	// Correctness Test
+	FN_TYPE *test_nFn = new FN_TYPE[numVtx];
+	FN_TYPE *test_cFn = new FN_TYPE[numVtx];
+	CPUrun(test_nFn, test_cFn, 1);
+
 	checkCudaErrors(cudaMemcpy(nFn, dev_nFn, sizeof(FN_TYPE)*numVtx, cudaMemcpyDeviceToHost));
 	checkCudaErrors(cudaMemcpy(cFn, dev_cFn, sizeof(FN_TYPE)*numVtx, cudaMemcpyDeviceToHost));
 
-	// Correctness Test
 	double sum_error_n = 0.0, sum_error_c = 0.0;
 	int error_counter = 0;
 	for(int i = 0; i < numVtx; i++) {
@@ -417,9 +417,7 @@ double GPUrun(int n) {
 			error_counter++;
 			//printf("Error at %d: Should be %f but is %f!\n", i, test_nFn[i], nFn[i]);
 		}
-
 	}
-
 
 	if (verbose || debug)
 		printf("Sum / Mean error for n: %f / %f and for c: %f / %f. Number of errors in total: %d\n", sum_error_n, sum_error_n/numVtx, sum_error_c, sum_error_c/numVtx, error_counter);
@@ -487,42 +485,54 @@ double GPUrun(int n) {
 	return 1000*best_time/maxIt;
 }
 
-void CPUrun(FN_TYPE *test_nFn, FN_TYPE *test_cFn) {
-	FN_TYPE *nLap = new FN_TYPE[numVtx];
-	FN_TYPE *cLap = new FN_TYPE[numVtx];
-	OpenMesh::Vec3f *facGradN  = new OpenMesh::Vec3f[numFaces];
-	OpenMesh::Vec3f *facGradC  = new OpenMesh::Vec3f[numFaces];
-	OpenMesh::Vec3f *vtxGradN  = new OpenMesh::Vec3f[numVtx];
-	OpenMesh::Vec3f *vtxGradC  = new OpenMesh::Vec3f[numVtx];
-	FN_TYPE *dauN = new FN_TYPE[numVtx];
-	FN_TYPE *dauC = new FN_TYPE[numVtx];
+void CPUrun(FN_TYPE *test_nFn, FN_TYPE *test_cFn, int num_steps) {
+	std::copy(nFn, nFn + numVtx, test_nFn);
+	std::copy(cFn, cFn + numVtx, test_cFn);
 
-	computeLaplacianCPU<FN_TYPE>(orderedMesh, nFn, nLap, mStats.wHej, mStats.wVtx);
-	computeLaplacianCPU<FN_TYPE>(orderedMesh, cFn, cLap, mStats.wHej, mStats.wVtx);
+	for (int i = 0; i < num_steps; i++) {
+		FN_TYPE *nLap = new FN_TYPE[numVtx];
+		FN_TYPE *cLap = new FN_TYPE[numVtx];
+		OpenMesh::Vec3f *facGradN = new OpenMesh::Vec3f[numFaces];
+		OpenMesh::Vec3f *facGradC = new OpenMesh::Vec3f[numFaces];
+		OpenMesh::Vec3f *vtxGradN = new OpenMesh::Vec3f[numVtx];
+		OpenMesh::Vec3f *vtxGradC = new OpenMesh::Vec3f[numVtx];
+		FN_TYPE *dauN = new FN_TYPE[numVtx];
+		FN_TYPE *dauC = new FN_TYPE[numVtx];
 
-	computeFaceGradientsCPU<OpenMesh::Vec3f>(orderedMesh, mStats.gradVec12, mStats.gradVec13, facGradN, nFn);
-	computeVertexGradientsCPU<OpenMesh::Vec3f>(orderedMesh, facGradN, vtxGradN, mStats.meshAngle);
+		computeLaplacianCPU<FN_TYPE>(orderedMesh, test_nFn, nLap, mStats.wHej,
+				mStats.wVtx);
+		computeLaplacianCPU<FN_TYPE>(orderedMesh, test_cFn, cLap, mStats.wHej,
+				mStats.wVtx);
 
-	computeFaceGradientsCPU<OpenMesh::Vec3f>(orderedMesh, mStats.gradVec12, mStats.gradVec13, facGradC, cFn);
-	computeVertexGradientsCPU<OpenMesh::Vec3f>(orderedMesh, facGradC, vtxGradC, mStats.meshAngle);
+		computeFaceGradientsCPU<OpenMesh::Vec3f>(orderedMesh, mStats.gradVec12,
+				mStats.gradVec13, facGradN, test_nFn);
+		computeVertexGradientsCPU<OpenMesh::Vec3f>(orderedMesh, facGradN,
+				vtxGradN, mStats.meshAngle);
 
-	for(unsigned int i=0; i < numVtx; ++i)
-	{
-		dauN[i] = D*nLap[i] - alpha*nFn[i]*cLap[i] - alpha* (vtxGradC[i] | vtxGradN[i]) + S*r*nFn[i]*(nMax - nFn[i]);
-		dauC[i] = cLap[i] + S * (-cFn[i] + nFn[i]/(1+nFn[i]) );
-	}
+		computeFaceGradientsCPU<OpenMesh::Vec3f>(orderedMesh, mStats.gradVec12,
+				mStats.gradVec13, facGradC, test_cFn);
+		computeVertexGradientsCPU<OpenMesh::Vec3f>(orderedMesh, facGradC,
+				vtxGradC, mStats.meshAngle);
 
-	// update functions
-	for(unsigned int i=0; i < numVtx; ++i)
-	{
-		test_nFn[i] = nFn[i] + (dt*(dauN[i]));
-		test_cFn[i] = cFn[i] + (dt*dauC[i]);
+		for (unsigned int i = 0; i < numVtx; ++i) {
+			dauN[i] = D * nLap[i] - alpha * test_nFn[i] * cLap[i]
+					- alpha * (vtxGradC[i] | vtxGradN[i])
+					+ S * r * test_nFn[i] * (nMax - test_nFn[i]);
+			dauC[i] = cLap[i]
+					+ S * (-test_cFn[i] + test_nFn[i] / (1 + test_nFn[i]));
+		}
 
-		if (test_nFn[i] <0)
-			test_nFn[i] = 0;
+		// update functions
+		for (unsigned int i = 0; i < numVtx; ++i) {
+			test_nFn[i] = test_nFn[i] + (dt * (dauN[i]));
+			test_cFn[i] = test_cFn[i] + (dt * dauC[i]);
 
-		if (test_cFn[i] <0)
-			test_cFn[i] = 0;
+			if (test_nFn[i] < 0)
+				test_nFn[i] = 0;
 
+			if (test_cFn[i] < 0)
+				test_cFn[i] = 0;
+
+		}
 	}
 }
