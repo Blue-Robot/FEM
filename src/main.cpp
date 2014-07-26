@@ -312,8 +312,10 @@ double GPUrun(int n) {
 	int threads = std::max(threads_n, threads_e);
 	//end
 
-	FN_TYPE *dev_nFn;
-	FN_TYPE *dev_cFn;
+	FN_TYPE *dev_nFn_one;
+	FN_TYPE *dev_cFn_one;
+	FN_TYPE *dev_nFn_two;
+	FN_TYPE *dev_cFn_two;
 	FN_TYPE *dev_nLap;
 	FN_TYPE *dev_cLap;
 	uint *dev_nbrTracker;
@@ -338,8 +340,10 @@ double GPUrun(int n) {
 	uint *dev_vertexFaces;
 	FN_TYPE *dev_faceWeights;
 
-	checkCudaErrors(cudaMalloc(&dev_nFn, sizeof(FN_TYPE)*numVtx));
-	checkCudaErrors(cudaMalloc(&dev_cFn, sizeof(FN_TYPE)*numVtx));
+	checkCudaErrors(cudaMalloc(&dev_nFn_one, sizeof(FN_TYPE)*numVtx));
+	checkCudaErrors(cudaMalloc(&dev_cFn_one, sizeof(FN_TYPE)*numVtx));
+	checkCudaErrors(cudaMalloc(&dev_nFn_two, sizeof(FN_TYPE)*numVtx));
+	checkCudaErrors(cudaMalloc(&dev_cFn_two, sizeof(FN_TYPE)*numVtx));
 	checkCudaErrors(cudaMalloc(&dev_nbrTracker, sizeof(uint)*(numVtx+1)));
 	checkCudaErrors(cudaMalloc(&dev_nbr, sizeof(uint)*numAngles));
 	checkCudaErrors(cudaMalloc(&dev_vtxW, sizeof(FN_TYPE)*numVtx));
@@ -367,8 +371,8 @@ double GPUrun(int n) {
 	checkCudaErrors(cudaMalloc(&dev_cVertexGradients, sizeof(float3)*numVtx));
 
 
-	checkCudaErrors(cudaMemcpy(dev_nFn, nFn, sizeof(FN_TYPE)*numVtx, cudaMemcpyHostToDevice));
-	checkCudaErrors(cudaMemcpy(dev_cFn, cFn, sizeof(FN_TYPE)*numVtx, cudaMemcpyHostToDevice));
+	checkCudaErrors(cudaMemcpy(dev_nFn_one, nFn, sizeof(FN_TYPE)*numVtx, cudaMemcpyHostToDevice));
+	checkCudaErrors(cudaMemcpy(dev_cFn_one, cFn, sizeof(FN_TYPE)*numVtx, cudaMemcpyHostToDevice));
 	checkCudaErrors(cudaMemcpy(dev_nbrTracker, nbrTracker, sizeof(uint)*(numVtx+1), cudaMemcpyHostToDevice));
 	checkCudaErrors(cudaMemcpy(dev_nbr, neighbors, sizeof(uint)*numAngles, cudaMemcpyHostToDevice));
 	checkCudaErrors(cudaMemcpy(dev_vtxW, mStats.wVtx, sizeof(FN_TYPE)*numVtx, cudaMemcpyHostToDevice));
@@ -389,8 +393,10 @@ double GPUrun(int n) {
 
 
 	cudaProfilerStart();
-	computeLaplacianAndFaceGradients(dev_nFn, dev_cFn, dev_nLap, dev_cLap, dev_faceVertices, dev_nbrTracker, dev_nbr, dev_vtxW, dev_heWeights, dev_heGradients, dev_nFaceGradients, dev_cFaceGradients, dev_nVertexGradients, dev_cVertexGradients, dev_faceTracker, dev_vertexFaces, dev_faceWeights, dev_parts_n, dev_parts_e, dev_halo_faces, dev_halo_faces_keys, n, threads);
-	update(dev_nFn, dev_cFn, dev_nLap, dev_cLap, dev_nVertexGradients, dev_cVertexGradients, dt, numVtx, 160);
+	computeLaplacianAndFaceGradients(dev_nFn_one, dev_cFn_one, dev_nLap, dev_cLap, dev_faceVertices, dev_nbrTracker, dev_nbr, dev_vtxW, dev_heWeights, dev_heGradients, dev_nFaceGradients, dev_cFaceGradients, dev_nVertexGradients, dev_cVertexGradients, dev_faceTracker, dev_vertexFaces, dev_faceWeights, dev_parts_n, dev_parts_e, dev_halo_faces, dev_halo_faces_keys, n, threads);
+	update(dev_nFn_one, dev_cFn_one, dev_nFn_two, dev_cFn_two, dev_nLap, dev_cLap, dev_nVertexGradients, dev_cVertexGradients, dt, numVtx, 160);
+	computeLaplacianAndFaceGradients(dev_nFn_two, dev_cFn_two, dev_nLap, dev_cLap, dev_faceVertices, dev_nbrTracker, dev_nbr, dev_vtxW, dev_heWeights, dev_heGradients, dev_nFaceGradients, dev_cFaceGradients, dev_nVertexGradients, dev_cVertexGradients, dev_faceTracker, dev_vertexFaces, dev_faceWeights, dev_parts_n, dev_parts_e, dev_halo_faces, dev_halo_faces_keys, n, threads);
+	update(dev_nFn_two, dev_cFn_two, dev_nFn_one, dev_cFn_one, dev_nLap, dev_cLap, dev_nVertexGradients, dev_cVertexGradients, dt, numVtx, 160);
 	cudaProfilerStop();
 
 
@@ -403,10 +409,10 @@ double GPUrun(int n) {
 	// Correctness Test
 	FN_TYPE *test_nFn = new FN_TYPE[numVtx];
 	FN_TYPE *test_cFn = new FN_TYPE[numVtx];
-	CPUrun(test_nFn, test_cFn, 1);
+	CPUrun(test_nFn, test_cFn, 2);
 
-	checkCudaErrors(cudaMemcpy(nFn, dev_nFn, sizeof(FN_TYPE)*numVtx, cudaMemcpyDeviceToHost));
-	checkCudaErrors(cudaMemcpy(cFn, dev_cFn, sizeof(FN_TYPE)*numVtx, cudaMemcpyDeviceToHost));
+	checkCudaErrors(cudaMemcpy(nFn, dev_nFn_one, sizeof(FN_TYPE)*numVtx, cudaMemcpyDeviceToHost));
+	checkCudaErrors(cudaMemcpy(cFn, dev_cFn_one, sizeof(FN_TYPE)*numVtx, cudaMemcpyDeviceToHost));
 
 	double sum_error_n = 0.0, sum_error_c = 0.0;
 	int error_counter = 0;
@@ -437,13 +443,16 @@ double GPUrun(int n) {
 		cudaEventRecord(start, 0);
 
 		for (int i = 0; i < maxIt; i++) {
-			computeLaplacianAndFaceGradients(dev_nFn, dev_cFn, dev_nLap, dev_cLap, dev_faceVertices, dev_nbrTracker, dev_nbr, dev_vtxW, dev_heWeights, dev_heGradients, dev_nFaceGradients, dev_cFaceGradients, dev_nVertexGradients, dev_cVertexGradients, dev_faceTracker, dev_vertexFaces, dev_faceWeights, dev_parts_n, dev_parts_e, dev_halo_faces, dev_halo_faces_keys, n, threads);
-			update(dev_nFn, dev_cFn, dev_nLap, dev_cLap, dev_nVertexGradients, dev_cVertexGradients, dt, numVtx, th);
+			computeLaplacianAndFaceGradients(dev_nFn_one, dev_cFn_one, dev_nLap, dev_cLap, dev_faceVertices, dev_nbrTracker, dev_nbr, dev_vtxW, dev_heWeights, dev_heGradients, dev_nFaceGradients, dev_cFaceGradients, dev_nVertexGradients, dev_cVertexGradients, dev_faceTracker, dev_vertexFaces, dev_faceWeights, dev_parts_n, dev_parts_e, dev_halo_faces, dev_halo_faces_keys, n, threads);
+			update(dev_nFn_one, dev_cFn_one, dev_nFn_two, dev_cFn_two, dev_nLap, dev_cLap, dev_nVertexGradients, dev_cVertexGradients, dt, numVtx, th);
+			computeLaplacianAndFaceGradients(dev_nFn_two, dev_cFn_two, dev_nLap, dev_cLap, dev_faceVertices, dev_nbrTracker, dev_nbr, dev_vtxW, dev_heWeights, dev_heGradients, dev_nFaceGradients, dev_cFaceGradients, dev_nVertexGradients, dev_cVertexGradients, dev_faceTracker, dev_vertexFaces, dev_faceWeights, dev_parts_n, dev_parts_e, dev_halo_faces, dev_halo_faces_keys, n, threads);
+			update(dev_nFn_two, dev_cFn_two, dev_nFn_one, dev_cFn_one, dev_nLap, dev_cLap, dev_nVertexGradients, dev_cVertexGradients, dt, numVtx, th);
 		}
 
 		cudaEventRecord(stop, 0);
 		cudaEventSynchronize(stop);
 		cudaEventElapsedTime( &elapsedTime, start, stop);
+		elapsedTime /= 2;
 		if (best_time < 0 || best_time > elapsedTime) {
 			best_time = elapsedTime;
 			best_configuartion = th;
@@ -458,8 +467,8 @@ double GPUrun(int n) {
 	}
 
 	// Free Data
-	checkCudaErrors(cudaFree(dev_nFn));
-	checkCudaErrors(cudaFree(dev_cFn));
+	checkCudaErrors(cudaFree(dev_nFn_one));
+	checkCudaErrors(cudaFree(dev_cFn_one));
 	checkCudaErrors(cudaFree(dev_nLap));
 	checkCudaErrors(cudaFree(dev_cLap));
 	checkCudaErrors(cudaFree(dev_nbrTracker));

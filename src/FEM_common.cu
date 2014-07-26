@@ -13,7 +13,7 @@ __global__ void computeLaplacianAndFaceGradientsKernel (FN_TYPE *nFn, FN_TYPE *c
 __global__ void computeLaplacianKernel(FN_TYPE *nFn, FN_TYPE *cFn, FN_TYPE *nLap, FN_TYPE *cLap, uint *t, uint *nbr, FN_TYPE *vtxW, FN_TYPE *heW, uint *halo_vertices, uint *halo_vertices_keys, uint *parts, uint vertices);
 __global__ void computeFaceGradientsKernel(uint *fv, FN_TYPE *nFn, FN_TYPE *cFn, float3 *grads, float3 *nfGrads, float3 *cfGrads, uint *halo_faces, uint *halo_faces_keys, uint *parts, uint faces);
 __global__ void computeVertexGradientsKernel(float3 *nfGrads, float3 *cfGrads, float3 *nvGrads, float3 *cvGrads, uint *t, uint *faces, FN_TYPE *fW, uint *parts, uint vertices);
-__global__ void updateKernel(FN_TYPE *nFn, FN_TYPE *cFn, FN_TYPE *nLap, FN_TYPE *cLap, float3 *nVtxGrad, float3 *cVtxGrad, double dt, uint vertices);
+__global__ void updateKernel(FN_TYPE *nFn_src, FN_TYPE *cFn_src, FN_TYPE *nFn_dst, FN_TYPE *cFn_dst, FN_TYPE *nLap, FN_TYPE *cLap, float3 *nVtxGrad, float3 *cVtxGrad, double dt, uint vertices);
 
 extern "C" void computeLaplacianAndFaceGradients (FN_TYPE *nFn, FN_TYPE *cFn, FN_TYPE *nLap, FN_TYPE *cLap, uint *fv, uint *t, uint *nbr, FN_TYPE *vtxW, FN_TYPE *heW, float3 *grads, float3 *nfGrads, float3 *cfGrads, float3 *nvGrads, float3 *cvGrads, uint *f, uint *faces, FN_TYPE *fW, uint *parts_n, uint *parts_e, uint *halo_faces, uint *halo_faces_keys, uint blocks, uint threads) {
 	dim3 block(threads, 1, 1);
@@ -182,13 +182,13 @@ __global__ void computeVertexGradientsKernel(float3 *nfGrads, float3 *cfGrads, f
 	}
 }
 
-extern "C" void update(FN_TYPE *nFn, FN_TYPE *cFn, FN_TYPE *nLap, FN_TYPE *cLap, float3 *nVtxGrad, float3 *cVtxGrad, double dt, uint vertices, uint threads) {
+extern "C" void update(FN_TYPE *nFn_src, FN_TYPE *cFn_src, FN_TYPE *nFn_dst, FN_TYPE *cFn_dst, FN_TYPE *nLap, FN_TYPE *cLap, float3 *nVtxGrad, float3 *cVtxGrad, double dt, uint vertices, uint threads) {
 	dim3 block(threads, 1, 1);
 	dim3 grid(ceil((double)vertices/threads), 1, 1);
-	updateKernel<<<grid, block>>>(nFn, cFn, nLap, cLap, nVtxGrad, cVtxGrad, dt, vertices);
+	updateKernel<<<grid, block>>>(nFn_src, cFn_src, nFn_dst, cFn_dst, nLap, cLap, nVtxGrad, cVtxGrad, dt, vertices);
 }
 
-__global__ void updateKernel(FN_TYPE *nFn, FN_TYPE *cFn, FN_TYPE *nLap, FN_TYPE *cLap, float3 *nVtxGrad, float3 *cVtxGrad, double dt, uint vertices) {
+__global__ void updateKernel(FN_TYPE *nFn_src, FN_TYPE *cFn_src, FN_TYPE *nFn_dst, FN_TYPE *cFn_dst, FN_TYPE *nLap, FN_TYPE *cLap, float3 *nVtxGrad, float3 *cVtxGrad, double dt, uint vertices) {
 	int i = blockIdx.x*blockDim.x + threadIdx.x;
 	if (i >= vertices) return;
 
@@ -196,9 +196,9 @@ __global__ void updateKernel(FN_TYPE *nFn, FN_TYPE *cFn, FN_TYPE *nLap, FN_TYPE 
 	float3 cVG = cVtxGrad[i];
 	FN_TYPE dotP = dot(nVG, cVG);
 
-	FN_TYPE dauN = D*nLap[i] - alpha*nFn[i]*cLap[i] - alpha*dotP + S*r*nFn[i]*(nMax - nFn[i]);
-	FN_TYPE dauC = cLap[i] + S*(nFn[i]/(1+nFn[i]) - cFn[i]);
+	FN_TYPE dauN = D*nLap[i] - alpha*nFn_src[i]*cLap[i] - alpha*dotP + S*r*nFn_src[i]*(nMax - nFn_src[i]);
+	FN_TYPE dauC = cLap[i] + S*(nFn_src[i]/(1+nFn_src[i]) - cFn_src[i]);
 
-	nFn[i] += dt*dauN;
-	cFn[i] += dt*dauC;
+	nFn_dst[i] = dt*dauN + nFn_src[i];
+	cFn_dst[i] = dt*dauC + cFn_src[i];
 }

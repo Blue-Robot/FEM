@@ -77,8 +77,10 @@ extern "C" void computeVertexGradients(
 
 
 extern "C" void update(
-		FN_TYPE *nFn,
-		FN_TYPE *cFn,
+		FN_TYPE *nFn_src,
+		FN_TYPE *cFn_src,
+		FN_TYPE *nFn_dst,
+		FN_TYPE *cFn_dst,
 		FN_TYPE *nLap,
 		FN_TYPE *cLap,
 		float3 *nVtxGrad,
