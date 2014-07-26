@@ -393,10 +393,8 @@ double GPUrun(int n) {
 
 
 	cudaProfilerStart();
-	computeLaplacianAndFaceGradients(dev_nFn_one, dev_cFn_one, dev_nFn_two, dev_cFn_two, dev_nLap, dev_cLap, dev_faceVertices, dev_nbrTracker, dev_nbr, dev_vtxW, dev_heWeights, dev_heGradients, dev_nFaceGradients, dev_cFaceGradients, dev_nVertexGradients, dev_cVertexGradients, dev_faceTracker, dev_vertexFaces, dev_faceWeights, dev_parts_n, dev_parts_e, dev_halo_faces, dev_halo_faces_keys, n, threads, dt);
-	//update(dev_nFn_one, dev_cFn_one, dev_nFn_two, dev_cFn_two, dev_nLap, dev_cLap, dev_nVertexGradients, dev_cVertexGradients, dt, numVtx, 160);
-	computeLaplacianAndFaceGradients(dev_nFn_two, dev_cFn_two, dev_nFn_one, dev_cFn_one, dev_nLap, dev_cLap, dev_faceVertices, dev_nbrTracker, dev_nbr, dev_vtxW, dev_heWeights, dev_heGradients, dev_nFaceGradients, dev_cFaceGradients, dev_nVertexGradients, dev_cVertexGradients, dev_faceTracker, dev_vertexFaces, dev_faceWeights, dev_parts_n, dev_parts_e, dev_halo_faces, dev_halo_faces_keys, n, threads, dt);
-	//update(dev_nFn_two, dev_cFn_two, dev_nFn_one, dev_cFn_one, dev_nLap, dev_cLap, dev_nVertexGradients, dev_cVertexGradients, dt, numVtx, 160);
+	step(dev_nFn_one, dev_cFn_one, dev_nFn_two, dev_cFn_two, dev_nLap, dev_cLap, dev_faceVertices, dev_nbrTracker, dev_nbr, dev_vtxW, dev_heWeights, dev_heGradients, dev_nFaceGradients, dev_cFaceGradients, dev_nVertexGradients, dev_cVertexGradients, dev_faceTracker, dev_vertexFaces, dev_faceWeights, dev_parts_n, dev_parts_e, dev_halo_faces, dev_halo_faces_keys, n, threads, dt);
+	step(dev_nFn_two, dev_cFn_two, dev_nFn_one, dev_cFn_one, dev_nLap, dev_cLap, dev_faceVertices, dev_nbrTracker, dev_nbr, dev_vtxW, dev_heWeights, dev_heGradients, dev_nFaceGradients, dev_cFaceGradients, dev_nVertexGradients, dev_cVertexGradients, dev_faceTracker, dev_vertexFaces, dev_faceWeights, dev_parts_n, dev_parts_e, dev_halo_faces, dev_halo_faces_keys, n, threads, dt);
 	cudaProfilerStop();
 
 
@@ -431,39 +429,32 @@ double GPUrun(int n) {
 		return 0;
 
 	// Speed Test
-	int maxIt = 100;
-	int best_configuartion;
-	float best_time = -1;
-	for (int th = 32; th <= 1024; th+=32) {
-		float elapsedTime;
-		cudaEvent_t start, stop;
+	int maxIt = 1000;
 
-		cudaEventCreate(&start);
-		cudaEventCreate(&stop);
-		cudaEventRecord(start, 0);
 
-		for (int i = 0; i < maxIt; i++) {
-			computeLaplacianAndFaceGradients(dev_nFn_one, dev_cFn_one, dev_nFn_two, dev_cFn_two, dev_nLap, dev_cLap, dev_faceVertices, dev_nbrTracker, dev_nbr, dev_vtxW, dev_heWeights, dev_heGradients, dev_nFaceGradients, dev_cFaceGradients, dev_nVertexGradients, dev_cVertexGradients, dev_faceTracker, dev_vertexFaces, dev_faceWeights, dev_parts_n, dev_parts_e, dev_halo_faces, dev_halo_faces_keys, n, threads, dt);
-			//update(dev_nFn_one, dev_cFn_one, dev_nFn_two, dev_cFn_two, dev_nLap, dev_cLap, dev_nVertexGradients, dev_cVertexGradients, dt, numVtx, th);
-			computeLaplacianAndFaceGradients(dev_nFn_two, dev_cFn_two, dev_nFn_one, dev_cFn_one, dev_nLap, dev_cLap, dev_faceVertices, dev_nbrTracker, dev_nbr, dev_vtxW, dev_heWeights, dev_heGradients, dev_nFaceGradients, dev_cFaceGradients, dev_nVertexGradients, dev_cVertexGradients, dev_faceTracker, dev_vertexFaces, dev_faceWeights, dev_parts_n, dev_parts_e, dev_halo_faces, dev_halo_faces_keys, n, threads, dt);
-			//update(dev_nFn_two, dev_cFn_two, dev_nFn_one, dev_cFn_one, dev_nLap, dev_cLap, dev_nVertexGradients, dev_cVertexGradients, dt, numVtx, th);
-		}
+	float elapsedTime;
+	cudaEvent_t start, stop;
 
-		cudaEventRecord(stop, 0);
-		cudaEventSynchronize(stop);
-		cudaEventElapsedTime( &elapsedTime, start, stop);
-		elapsedTime /= 2;
-		if (best_time < 0 || best_time > elapsedTime) {
-			best_time = elapsedTime;
-			best_configuartion = th;
-		}
+	cudaEventCreate(&start);
+	cudaEventCreate(&stop);
+	cudaEventRecord(start, 0);
+
+	for (int i = 0; i < maxIt; i++) {
+		step(dev_nFn_one, dev_cFn_one, dev_nFn_two, dev_cFn_two, dev_nLap, dev_cLap, dev_faceVertices, dev_nbrTracker, dev_nbr, dev_vtxW, dev_heWeights, dev_heGradients, dev_nFaceGradients, dev_cFaceGradients, dev_nVertexGradients, dev_cVertexGradients, dev_faceTracker, dev_vertexFaces, dev_faceWeights, dev_parts_n, dev_parts_e, dev_halo_faces, dev_halo_faces_keys, n, threads, dt);
+		step(dev_nFn_two, dev_cFn_two, dev_nFn_one, dev_cFn_one, dev_nLap, dev_cLap, dev_faceVertices, dev_nbrTracker, dev_nbr, dev_vtxW, dev_heWeights, dev_heGradients, dev_nFaceGradients, dev_cFaceGradients, dev_nVertexGradients, dev_cVertexGradients, dev_faceTracker, dev_vertexFaces, dev_faceWeights, dev_parts_n, dev_parts_e, dev_halo_faces, dev_halo_faces_keys, n, threads, dt);
 	}
 
+	cudaEventRecord(stop, 0);
+	cudaEventSynchronize(stop);
+	cudaEventElapsedTime( &elapsedTime, start, stop);
+	elapsedTime /= 2;
+
+
 	if (verbose) {
-		printf("Time needed for %d iterations: %f ms with %d threads each and %d partitions\n", maxIt, best_time, best_configuartion, n);
-		printf("Average time needed per Iteration: %f us\n", 1000*best_time/maxIt);
+		printf("Time needed for %d iterations: %f ms with %d threads each and %d partitions\n", maxIt, elapsedTime, threads, n);
+		printf("Average time needed per Iteration: %f us\n", 1000*elapsedTime/maxIt);
 	} else {
-		printf("Errors: %d, Partitions: %d, Threads: %d, Time: %f\n", error_counter, n, best_configuartion, 1000*best_time/maxIt);
+		printf("Errors: %d, Partitions: %d, Threads: %d, Time: %f\n", error_counter, n, threads, 1000*elapsedTime/maxIt);
 	}
 
 	// Free Data
@@ -491,7 +482,7 @@ double GPUrun(int n) {
 	checkCudaErrors(cudaFree(dev_vertexFaces));
 	checkCudaErrors(cudaFree(dev_faceWeights));
 
-	return 1000*best_time/maxIt;
+	return 1000*elapsedTime/maxIt;
 }
 
 void CPUrun(FN_TYPE *test_nFn, FN_TYPE *test_cFn, int num_steps) {
