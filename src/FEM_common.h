@@ -13,8 +13,16 @@ extern "C" void computeLaplacianAndFaceGradients (
 		float3 *grads,
 		float3 *nfGrads,
 		float3 *cfGrads,
-		uint vertices,
-		uint faces,
+		float3 *nvGrads,
+		float3 *cvGrads,
+		uint *f,
+		uint *faces,
+		FN_TYPE *fW,
+		uint *parts_n,
+		uint *parts_e,
+		uint *halo_faces,
+		uint *halo_faces_keys,
+		uint blocks,
 		uint threads
 		);
 

@@ -298,17 +298,18 @@ double GPUrun(int n) {
 		max_size_e = std::max(max_size_e, size_e);
 	}
 
-//	if(max_size_n > 1024) {
-//		printf("ERROR: Too many nodes per Block! (%d %d)\n", n, max_size_n);
-//		return -1.0;
-//	}
-//	if(max_size_e > 1024) {
-//		printf("ERROR: Too many elements per Block! (%d %d)\n", n, max_size_e);
-//		return -1.0;
-//	}
+	if(max_size_n > 1024) {
+		printf("ERROR: Too many nodes per Block! (%d %d)\n", n, max_size_n);
+		return -1.0;
+	}
+	if(max_size_e > 1024) {
+		printf("ERROR: Too many elements per Block! (%d %d)\n", n, max_size_e);
+		return -1.0;
+	}
 
 	int threads_n = ((max_size_n + 32 - 1) / 32) * 32;
 	int threads_e = ((max_size_e + 32 - 1) / 32) * 32;
+	int threads = std::max(threads_n, threads_e);
 	//end
 
 	FN_TYPE *dev_nFn;
@@ -388,8 +389,7 @@ double GPUrun(int n) {
 
 
 	cudaProfilerStart();
-	computeLaplacianAndFaceGradients(dev_nFn, dev_cFn, dev_nLap, dev_cLap, dev_faceVertices, dev_nbrTracker, dev_nbr, dev_vtxW, dev_heWeights, dev_heGradients, dev_nFaceGradients, dev_cFaceGradients, numVtx, numFaces, 160);
-	computeVertexGradients(dev_nFaceGradients, dev_cFaceGradients, dev_nVertexGradients, dev_cVertexGradients, dev_faceTracker, dev_vertexFaces, dev_faceWeights, dev_parts_n, numVtx, n, 160);
+	computeLaplacianAndFaceGradients(dev_nFn, dev_cFn, dev_nLap, dev_cLap, dev_faceVertices, dev_nbrTracker, dev_nbr, dev_vtxW, dev_heWeights, dev_heGradients, dev_nFaceGradients, dev_cFaceGradients, dev_nVertexGradients, dev_cVertexGradients, dev_faceTracker, dev_vertexFaces, dev_faceWeights, dev_parts_n, dev_parts_e, dev_halo_faces, dev_halo_faces_keys, n, threads);
 
 	FN_TYPE *test_nFn = new FN_TYPE[numVtx];
 	FN_TYPE *test_cFn = new FN_TYPE[numVtx];
@@ -413,8 +413,11 @@ double GPUrun(int n) {
 	for(int i = 0; i < numVtx; i++) {
 		sum_error_n += fabs(nFn[i]-test_nFn[i]);
 		sum_error_c += fabs(cFn[i]-test_cFn[i]);
-		if (fabs(nFn[i]-test_nFn[i]) > 0 || fabs(cFn[i]-test_cFn[i]) > 0)
+		if (fabs(nFn[i]-test_nFn[i]) > 0 || fabs(cFn[i]-test_cFn[i]) > 0) {
 			error_counter++;
+			//printf("Error at %d: Should be %f but is %f!\n", i, test_nFn[i], nFn[i]);
+		}
+
 	}
 
 
@@ -424,7 +427,7 @@ double GPUrun(int n) {
 		return 0;
 
 	// Speed Test
-	int maxIt = 1000;
+	int maxIt = 100;
 	int best_configuartion;
 	float best_time = -1;
 	for (int th = 32; th <= 1024; th+=32) {
@@ -436,8 +439,7 @@ double GPUrun(int n) {
 		cudaEventRecord(start, 0);
 
 		for (int i = 0; i < maxIt; i++) {
-			computeLaplacianAndFaceGradients(dev_nFn, dev_cFn, dev_nLap, dev_cLap, dev_faceVertices, dev_nbrTracker, dev_nbr, dev_vtxW, dev_heWeights, dev_heGradients, dev_nFaceGradients, dev_cFaceGradients, numVtx, numFaces, th);
-			computeVertexGradients(dev_nFaceGradients, dev_cFaceGradients, dev_nVertexGradients, dev_cVertexGradients, dev_faceTracker, dev_vertexFaces, dev_faceWeights, dev_parts_n, numVtx, n, th);
+			computeLaplacianAndFaceGradients(dev_nFn, dev_cFn, dev_nLap, dev_cLap, dev_faceVertices, dev_nbrTracker, dev_nbr, dev_vtxW, dev_heWeights, dev_heGradients, dev_nFaceGradients, dev_cFaceGradients, dev_nVertexGradients, dev_cVertexGradients, dev_faceTracker, dev_vertexFaces, dev_faceWeights, dev_parts_n, dev_parts_e, dev_halo_faces, dev_halo_faces_keys, n, threads);
 			update(dev_nFn, dev_cFn, dev_nLap, dev_cLap, dev_nVertexGradients, dev_cVertexGradients, dt, numVtx, th);
 		}
 
