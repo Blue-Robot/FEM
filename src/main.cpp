@@ -407,10 +407,12 @@ double GPUrun(int n) {
 	// Correctness Test
 	FN_TYPE *test_nFn = new FN_TYPE[numVtx];
 	FN_TYPE *test_cFn = new FN_TYPE[numVtx];
-	CPUrun(test_nFn, test_cFn, 2);
 
-	checkCudaErrors(cudaMemcpy(nFn, dev_nFn_one, sizeof(FN_TYPE)*numVtx, cudaMemcpyDeviceToHost));
-	checkCudaErrors(cudaMemcpy(cFn, dev_cFn_one, sizeof(FN_TYPE)*numVtx, cudaMemcpyDeviceToHost));
+	// Round 1
+	CPUrun(test_nFn, test_cFn, 1);
+
+	checkCudaErrors(cudaMemcpy(nFn, dev_nFn_two, sizeof(FN_TYPE)*numVtx, cudaMemcpyDeviceToHost));
+	checkCudaErrors(cudaMemcpy(cFn, dev_cFn_two, sizeof(FN_TYPE)*numVtx, cudaMemcpyDeviceToHost));
 
 	double sum_error_n = 0.0, sum_error_c = 0.0;
 	int error_counter = 0;
@@ -424,7 +426,29 @@ double GPUrun(int n) {
 	}
 
 	if (verbose || debug)
-		printf("Sum / Mean error for n: %f / %f and for c: %f / %f. Number of errors in total: %d\n", sum_error_n, sum_error_n/numVtx, sum_error_c, sum_error_c/numVtx, error_counter);
+		printf("Round 1: Sum / Mean error for n: %f / %f and for c: %f / %f. Number of errors in total: %d\n", sum_error_n, sum_error_n/numVtx, sum_error_c, sum_error_c/numVtx, error_counter);
+
+	// Round 2
+	CPUrun(test_nFn, test_cFn, 1);
+
+	checkCudaErrors(cudaMemcpy(nFn, dev_nFn_one, sizeof(FN_TYPE)*numVtx, cudaMemcpyDeviceToHost));
+	checkCudaErrors(cudaMemcpy(cFn, dev_cFn_one, sizeof(FN_TYPE)*numVtx, cudaMemcpyDeviceToHost));
+
+	sum_error_n = 0.0; sum_error_c = 0.0;
+	error_counter = 0;
+
+	for(int i = 0; i < numVtx; i++) {
+		sum_error_n += fabs(nFn[i]-test_nFn[i]);
+		sum_error_c += fabs(cFn[i]-test_cFn[i]);
+		if (fabs(nFn[i]-test_nFn[i]) > 0 || fabs(cFn[i]-test_cFn[i]) > 0) {
+			error_counter++;
+		}
+	}
+
+	if (verbose || debug)
+		printf("Round 2: Sum / Mean error for n: %f / %f and for c: %f / %f. Number of errors in total: %d\n", sum_error_n, sum_error_n/numVtx, sum_error_c, sum_error_c/numVtx, error_counter);
+
+
 	if(debug)
 		return 0;
 
