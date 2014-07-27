@@ -19,7 +19,7 @@ extern "C" void step (
 		uint *parts_n,
 		uint *parts_e,
 		uint *halo_faces,
-		uint *halo_faces_keys,
+		uint hf_pitchInBytes,
 		uint blocks,
 		uint threads,
 		double dt

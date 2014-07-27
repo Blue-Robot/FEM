@@ -9,21 +9,20 @@ const FN_TYPE alpha = 12.02;
 const FN_TYPE S = 1;
 
 __global__ void stepKernel(FN_TYPE *nFn_src, FN_TYPE *cFn_src, FN_TYPE *nFn_dst,
-		FN_TYPE *cFn_dst, uint *fv, uint *t,
-		uint *nbr, FN_TYPE *vtxW, FN_TYPE *heW, float3 *grads, float3 *nfGrads,
-		float3 *cfGrads, uint *f, uint *faces,
-		FN_TYPE *fW, uint *vertex_parts, uint *face_parts, uint *halo_faces,
-		uint *halo_faces_keys, double dt) {
+		FN_TYPE *cFn_dst, uint *fv, uint *t, uint *nbr, FN_TYPE *vtxW,
+		FN_TYPE *heW, float3 *grads, float3 *nfGrads, float3 *cfGrads, uint *f,
+		uint *faces, FN_TYPE *fW, uint *vertex_parts, uint *face_parts,
+		uint *halo_faces, uint hf_pitch, double dt) {
 
 	/* face gradients *************************************/
 	int i = face_parts[blockIdx.x] + threadIdx.x;
 
 	if (i >= face_parts[blockIdx.x + 1]) {
 
-		i = i - face_parts[blockIdx.x + 1] + halo_faces_keys[blockIdx.x];
-		if (i >= halo_faces_keys[blockIdx.x + 1])
+		i = i - face_parts[blockIdx.x + 1];
+		i = halo_faces[blockIdx.x*hf_pitch + i];
+		if (i < face_parts[gridDim.x] || i >= face_parts[gridDim.x+1])
 			return;
-		i = halo_faces[i];
 	}
 
 	FN_TYPE nv1 = nFn_src[fv[i * 3 + 2]];
@@ -62,7 +61,7 @@ __global__ void stepKernel(FN_TYPE *nFn_src, FN_TYPE *cFn_src, FN_TYPE *nFn_dst,
 		cg += w * cfGrads[face];
 		wg += w;
 	}
-	FN_TYPE dotP = dot(ng / wg, cg / wg);
+	FN_TYPE dotP = dot(ng, cg)/(wg*wg);
 	if (wg <= 0)
 		dotP = 0;
 
@@ -90,17 +89,18 @@ __global__ void stepKernel(FN_TYPE *nFn_src, FN_TYPE *cFn_src, FN_TYPE *nFn_dst,
 }
 
 extern "C" void step(FN_TYPE *nFn_src, FN_TYPE *cFn_src, FN_TYPE *nFn_dst,
-		FN_TYPE *cFn_dst, uint *fv, uint *t,
-		uint *nbr, FN_TYPE *vtxW, FN_TYPE *heW, float3 *grads, float3 *nfGrads,
-		float3 *cfGrads, uint *f, uint *faces,
-		FN_TYPE *fW, uint *parts_n, uint *parts_e, uint *halo_faces,
-		uint *halo_faces_keys, uint blocks, uint threads, double dt) {
+		FN_TYPE *cFn_dst, uint *fv, uint *t, uint *nbr, FN_TYPE *vtxW,
+		FN_TYPE *heW, float3 *grads, float3 *nfGrads, float3 *cfGrads, uint *f,
+		uint *faces, FN_TYPE *fW, uint *parts_n, uint *parts_e,
+		uint *halo_faces, uint hf_pitchInBytes, uint blocks, uint threads,
+		double dt) {
 
 	dim3 block(threads, 1, 1);
 	dim3 grid(blocks, 1, 1);
 
+
 	stepKernel<<<grid, block>>>(nFn_src, cFn_src, nFn_dst, cFn_dst,
 			fv, t, nbr, vtxW, heW, grads, nfGrads, cfGrads, f,
-			faces, fW, parts_n, parts_e, halo_faces, halo_faces_keys, dt);
+			faces, fW, parts_n, parts_e, halo_faces, hf_pitchInBytes/sizeof(uint), dt);
 
 }
