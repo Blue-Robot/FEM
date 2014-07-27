@@ -9,9 +9,9 @@ const FN_TYPE alpha = 12.02;
 const FN_TYPE S = 1;
 
 __global__ void stepKernel(FN_TYPE *nFn_src, FN_TYPE *cFn_src, FN_TYPE *nFn_dst,
-		FN_TYPE *cFn_dst, FN_TYPE *nLap, FN_TYPE *cLap, uint *fv, uint *t,
+		FN_TYPE *cFn_dst, uint *fv, uint *t,
 		uint *nbr, FN_TYPE *vtxW, FN_TYPE *heW, float3 *grads, float3 *nfGrads,
-		float3 *cfGrads, float3 *nvGrads, float3 *cvGrads, uint *f, uint *faces,
+		float3 *cfGrads, uint *f, uint *faces,
 		FN_TYPE *fW, uint *vertex_parts, uint *face_parts, uint *halo_faces,
 		uint *halo_faces_keys, double dt) {
 
@@ -62,13 +62,9 @@ __global__ void stepKernel(FN_TYPE *nFn_src, FN_TYPE *cFn_src, FN_TYPE *nFn_dst,
 		cg += w * cfGrads[face];
 		wg += w;
 	}
-	if (wg > 0) {
-		nvGrads[i] = ng / wg;
-		cvGrads[i] = cg / wg;
-	} else {
-		nvGrads[i] = make_float3(0.0f, 0.0f, 0.0f);
-		cvGrads[i] = make_float3(0.0f, 0.0f, 0.0f);
-	}
+	FN_TYPE dotP = dot(ng / wg, cg / wg);
+	if (wg <= 0)
+		dotP = 0;
 
 	/* laplacian ******************************************/
 	FN_TYPE vW = vtxW[i];
@@ -82,35 +78,29 @@ __global__ void stepKernel(FN_TYPE *nFn_src, FN_TYPE *cFn_src, FN_TYPE *nFn_dst,
 		n += nFn_src[nIdx] * hW;
 		c += cFn_src[nIdx] * hW;
 	}
-	nLap[i] = n;
-	cLap[i] = c;
 
 
 	/* update *********************************************/
-	float3 nVG = nvGrads[i];
-	float3 cVG = cvGrads[i];
-	FN_TYPE dotP = dot(nVG, cVG);
-
-	FN_TYPE dauN = D * nLap[i] - alpha * nFn_src[i] * cLap[i] - alpha * dotP
+	FN_TYPE dauN = D * n - alpha * nFn_src[i] * c - alpha * dotP
 			+ S * r * nFn_src[i] * (nMax - nFn_src[i]);
-	FN_TYPE dauC = cLap[i] + S * (nFn_src[i] / (1 + nFn_src[i]) - cFn_src[i]);
+	FN_TYPE dauC = c + S * (nFn_src[i] / (1 + nFn_src[i]) - cFn_src[i]);
 
 	nFn_dst[i] = dt * dauN + nFn_src[i];
 	cFn_dst[i] = dt * dauC + cFn_src[i];
 }
 
 extern "C" void step(FN_TYPE *nFn_src, FN_TYPE *cFn_src, FN_TYPE *nFn_dst,
-		FN_TYPE *cFn_dst, FN_TYPE *nLap, FN_TYPE *cLap, uint *fv, uint *t,
+		FN_TYPE *cFn_dst, uint *fv, uint *t,
 		uint *nbr, FN_TYPE *vtxW, FN_TYPE *heW, float3 *grads, float3 *nfGrads,
-		float3 *cfGrads, float3 *nvGrads, float3 *cvGrads, uint *f, uint *faces,
+		float3 *cfGrads, uint *f, uint *faces,
 		FN_TYPE *fW, uint *parts_n, uint *parts_e, uint *halo_faces,
 		uint *halo_faces_keys, uint blocks, uint threads, double dt) {
 
 	dim3 block(threads, 1, 1);
 	dim3 grid(blocks, 1, 1);
 
-	stepKernel<<<grid, block>>>(nFn_src, cFn_src, nFn_dst, cFn_dst, nLap, cLap,
-			fv, t, nbr, vtxW, heW, grads, nfGrads, cfGrads, nvGrads, cvGrads, f,
+	stepKernel<<<grid, block>>>(nFn_src, cFn_src, nFn_dst, cFn_dst,
+			fv, t, nbr, vtxW, heW, grads, nfGrads, cfGrads, f,
 			faces, fW, parts_n, parts_e, halo_faces, halo_faces_keys, dt);
 
 }
