@@ -83,14 +83,13 @@ float3 *gradients;
 uint *node_parts;
 uint *element_parts;
 
-std::vector<uint> halo_faces;
-std::vector<uint> halo_vertices;
-uint *halo_faces_keys;
-uint *halo_vertices_keys;
+uint *halo_faces;
+uint hf_max_size;
+uint max_size_e;
 
 //batch configuration
-int start_n = 52; // number of partitions to start with
-int end_n = 52; // number of partitions to end with
+int start_n = 39; // number of partitions to start with
+int end_n = 39; // number of partitions to end with
 
 using namespace OpenMesh;
 
@@ -245,7 +244,7 @@ void initializeGPUData(int n) {
 		gradients[i * 2 + 1] = make_float3(vec.values_[0], vec.values_[1], vec.values_[2]);
 	}
 
-	// set up helo
+	/*// set up helo
 	halo_faces_keys = new uint[n+1]; halo_faces_keys[0] = 0;
 	halo_vertices_keys = new uint[n+1]; halo_vertices_keys[0] = 0;
 	halo_faces.clear();
@@ -277,18 +276,74 @@ void initializeGPUData(int n) {
 				}
 			}
 		}
+		int patch = (element_parts[i+1]-element_parts[i])%32-1;
+		int last = (element_parts[i+1]-element_parts[i]) + halo_faces_part.size();
+		printf("D%d\n", last);
+		halo_faces.insert(halo_faces.end(), last);
+		halo_faces.resize(halo_faces.size() + patch);
 		halo_faces.insert(halo_faces.end(), halo_faces_part.begin(), halo_faces_part.end());
+
 		halo_vertices.insert(halo_vertices.end(), halo_vertices_part.begin(), halo_vertices_part.end());
 		halo_faces_keys[i+1] = halo_faces.size();
 		halo_vertices_keys[i+1] = halo_vertices.size();
+	}*/
+
+	// fill face halo array
+
+	// calculate size
+	hf_max_size = 0;
+	max_size_e = 0;
+	for (int i = 0; i < n; i++) {
+		std::set<uint> halo_faces_part;
+		for (int j = node_parts[i]; j < node_parts[i+1]; j++) {
+			VertexHandle v = orderedMesh.vertex_handle(j);
+
+			// loop over neighbor faces
+			for (SimpleTriMesh::VertexFaceIter vfIter = orderedMesh.vf_begin(v); vfIter != orderedMesh.vf_end(v); ++vfIter) {
+				FaceHandle faNe = vfIter.handle();
+
+				if (faNe.idx() < element_parts[i] || faNe.idx() >= element_parts[i+1]) {
+					halo_faces_part.insert(faNe.idx());
+				}
+			}
+		}
+		int patch = (element_parts[i+1]-element_parts[i])%32;
+		if (patch < 2)
+			patch+=32;
+		hf_max_size = std::max(hf_max_size, (uint)halo_faces_part.size() + patch);
 	}
 
+	halo_faces = new uint[n*hf_max_size]; std::fill_n(halo_faces, n*hf_max_size, 0);
+	for (int i = 0; i < n; i++) {
+		std::set<uint> halo_faces_part;
+		for (int j = node_parts[i]; j < node_parts[i+1]; j++) {
+			VertexHandle v = orderedMesh.vertex_handle(j);
+
+			// loop over neighbor faces
+			for (SimpleTriMesh::VertexFaceIter vfIter = orderedMesh.vf_begin(v); vfIter != orderedMesh.vf_end(v); ++vfIter) {
+				FaceHandle faNe = vfIter.handle();
+
+				if (faNe.idx() < element_parts[i] || faNe.idx() >= element_parts[i+1]) {
+					halo_faces_part.insert(faNe.idx());
+				}
+			}
+		}
+		int patch = (element_parts[i+1]-element_parts[i])%32;
+		if (patch < 2)
+			patch+=32;
+		halo_faces[i*hf_max_size] = patch;
+		halo_faces[i*hf_max_size+1] = (element_parts[i+1]-element_parts[i]) + halo_faces_part.size(); // last thread needed
+		max_size_e = std::max(max_size_e, (uint)(element_parts[i+1]-element_parts[i] + halo_faces_part.size()));
+
+		std::copy(halo_faces_part.begin(), halo_faces_part.end(), &halo_faces[i*hf_max_size + patch]);
+
+	}
 }
 
 double GPUrun(int n) {
 	// TO-DO find better spot for this
 	//begin
-	int max_size_n = 0;
+	/*int max_size_n = 0;
 	int max_size_e = 0;
 	for (int i = 0; i < n; i++) {
 		int size_n = node_parts[i+1] - node_parts[i] + halo_vertices_keys[i+1] - halo_vertices_keys[i];
@@ -296,20 +351,18 @@ double GPUrun(int n) {
 
 		max_size_n = std::max(max_size_n, size_n);
 		max_size_e = std::max(max_size_e, size_e);
-	}
+	}*/
 
-	if(max_size_n > 1024) {
-		printf("ERROR: Too many nodes per Block! (%d %d)\n", n, max_size_n);
-		return -1.0;
-	}
+//	if(max_size_n > 1024) {
+//		printf("ERROR: Too many nodes per Block! (%d %d)\n", n, max_size_n);
+//		return -1.0;
+//	}
 	if(max_size_e > 1024) {
 		printf("ERROR: Too many elements per Block! (%d %d)\n", n, max_size_e);
 		return -1.0;
 	}
 
-	int threads_n = ((max_size_n + 32 - 1) / 32) * 32;
-	int threads_e = ((max_size_e + 32 - 1) / 32) * 32;
-	int threads = std::max(threads_n, threads_e);
+	int threads = ((max_size_e + 32 - 1) / 32) * 32;
 	//end
 
 	FN_TYPE *dev_nFn_one;
@@ -348,9 +401,9 @@ double GPUrun(int n) {
 	checkCudaErrors(cudaMalloc(&dev_parts_e, sizeof(uint)*(n+2)));
 
 	size_t pitchInBytes;
-	checkCudaErrors(cudaMallocPitch(&dev_halo_faces, &pitchInBytes, max_size_e*sizeof(uint), n));
+	checkCudaErrors(cudaMallocPitch(&dev_halo_faces, &pitchInBytes, hf_max_size*sizeof(uint), n));
 	//checkCudaErrors(cudaMalloc(&dev_halo_faces, sizeof(uint)*halo_faces.size()));
-	checkCudaErrors(cudaMalloc(&dev_halo_vertices, sizeof(uint)*halo_vertices.size()));
+	//checkCudaErrors(cudaMalloc(&dev_halo_vertices, sizeof(uint)*halo_vertices.size()));
 	checkCudaErrors(cudaMalloc(&dev_halo_faces_keys, sizeof(uint)*(n+1)));
 	checkCudaErrors(cudaMalloc(&dev_halo_vertices_keys, sizeof(uint)*(n+1)));
 
@@ -374,11 +427,11 @@ double GPUrun(int n) {
 	checkCudaErrors(cudaMemcpy(dev_parts_n, node_parts, sizeof(uint)*(n+2), cudaMemcpyHostToDevice));
 	checkCudaErrors(cudaMemcpy(dev_parts_e, element_parts, sizeof(uint)*(n+2), cudaMemcpyHostToDevice));
 
-	checkCudaErrors(cudaMemcpy2D(dev_halo_faces, pitchInBytes, &halo_faces[0], max_size_e*sizeof(uint), max_size_e*sizeof(uint), n, cudaMemcpyHostToDevice));
+	checkCudaErrors(cudaMemcpy2D(dev_halo_faces, pitchInBytes, &halo_faces[0], hf_max_size*sizeof(uint), hf_max_size*sizeof(uint), n, cudaMemcpyHostToDevice));
 	//checkCudaErrors(cudaMemcpy(dev_halo_faces, &halo_faces[0], sizeof(uint)*halo_faces.size(), cudaMemcpyHostToDevice));
-	checkCudaErrors(cudaMemcpy(dev_halo_vertices, &halo_vertices[0], sizeof(uint)*halo_vertices.size(), cudaMemcpyHostToDevice));
-	checkCudaErrors(cudaMemcpy(dev_halo_faces_keys, halo_faces_keys, sizeof(uint)*(n+1), cudaMemcpyHostToDevice));
-	checkCudaErrors(cudaMemcpy(dev_halo_vertices_keys, halo_vertices_keys, sizeof(uint)*(n+1), cudaMemcpyHostToDevice));
+	//checkCudaErrors(cudaMemcpy(dev_halo_vertices, &halo_vertices[0], sizeof(uint)*halo_vertices.size(), cudaMemcpyHostToDevice));
+	//checkCudaErrors(cudaMemcpy(dev_halo_faces_keys, halo_faces_keys, sizeof(uint)*(n+1), cudaMemcpyHostToDevice));
+	//checkCudaErrors(cudaMemcpy(dev_halo_vertices_keys, halo_vertices_keys, sizeof(uint)*(n+1), cudaMemcpyHostToDevice));
 
 	checkCudaErrors(cudaMemcpy(dev_faceVertices, faceVertices, sizeof(uint)*numFaces*3, cudaMemcpyHostToDevice));
 	checkCudaErrors(cudaMemcpy(dev_heGradients, gradients, sizeof(float3)*numFaces*2, cudaMemcpyHostToDevice));
