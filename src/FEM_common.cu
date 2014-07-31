@@ -9,7 +9,7 @@ const FN_TYPE alpha = 12.02;
 const FN_TYPE S = 1;
 
 __global__ void stepKernel(FN_TYPE *nFn_src, FN_TYPE *cFn_src, FN_TYPE *nFn_dst,
-		FN_TYPE *cFn_dst, uint *fv, uint *nbr, FN_TYPE *vertex_weights, uint vv_pitch, FN_TYPE *vtxW,
+		FN_TYPE *cFn_dst, uint *fv, uint fv_pitch, uint *nbr, FN_TYPE *vertex_weights, uint vv_pitch, FN_TYPE *vtxW,
 		float3 *grads, float3 *nfGrads, float3 *cfGrads, uint *vertex_faces,
 		FN_TYPE *face_weights, uint vf_pitch, uint *vertex_parts, uint *face_parts,
 		uint *halo_faces, uint hf_pitch, double dt) {
@@ -26,12 +26,12 @@ __global__ void stepKernel(FN_TYPE *nFn_src, FN_TYPE *cFn_src, FN_TYPE *nFn_dst,
 		i = halo_faces[blockIdx.x*hf_pitch + i];
 	}
 
-	FN_TYPE nv1 = nFn_src[fv[i * 3 + 2]];
-	FN_TYPE nv12 = nFn_src[fv[i * 3]] - nv1;
-	FN_TYPE nv13 = nFn_src[fv[i * 3 + 1]] - nv1;
-	FN_TYPE cv1 = cFn_src[fv[i * 3 + 2]];
-	FN_TYPE cv12 = cFn_src[fv[i * 3]] - cv1;
-	FN_TYPE cv13 = cFn_src[fv[i * 3 + 1]] - cv1;
+	FN_TYPE nv1 = nFn_src[fv[2*fv_pitch + i]];
+	FN_TYPE nv12 = nFn_src[fv[i]] - nv1;
+	FN_TYPE nv13 = nFn_src[fv[fv_pitch + i]] - nv1;
+	FN_TYPE cv1 = cFn_src[fv[2*fv_pitch + i]];
+	FN_TYPE cv12 = cFn_src[fv[i]] - cv1;
+	FN_TYPE cv13 = cFn_src[fv[fv_pitch + i]] - cv1;
 
 	float3 grad12 = grads[i * 2];
 	float3 grad13 = grads[i * 2 + 1];
@@ -89,7 +89,7 @@ __global__ void stepKernel(FN_TYPE *nFn_src, FN_TYPE *cFn_src, FN_TYPE *nFn_dst,
 }
 
 extern "C" void step(FN_TYPE *nFn_src, FN_TYPE *cFn_src, FN_TYPE *nFn_dst,
-		FN_TYPE *cFn_dst, uint *fv, uint *nbr, FN_TYPE *vertex_weights, uint vv_pitchInBytes,
+		FN_TYPE *cFn_dst, uint *face_vertices, uint fv_pitchInBytes, uint *nbr, FN_TYPE *vertex_weights, uint vv_pitchInBytes,
 		FN_TYPE *vtxW, float3 *grads, float3 *nfGrads, float3 *cfGrads, uint *vertex_faces,
 		FN_TYPE *face_weights, uint vf_pitchInBytes, uint *parts_n, uint *parts_e,
 		uint *halo_faces, uint hf_pitchInBytes, uint blocks, uint threads,
@@ -100,7 +100,7 @@ extern "C" void step(FN_TYPE *nFn_src, FN_TYPE *cFn_src, FN_TYPE *nFn_dst,
 
 
 	stepKernel<<<grid, block>>>(nFn_src, cFn_src, nFn_dst, cFn_dst,
-			fv, nbr, vertex_weights, vv_pitchInBytes/sizeof(uint), vtxW, grads, nfGrads, cfGrads, vertex_faces,
+			face_vertices, fv_pitchInBytes/sizeof(uint), nbr, vertex_weights, vv_pitchInBytes/sizeof(uint), vtxW, grads, nfGrads, cfGrads, vertex_faces,
 			face_weights, vf_pitchInBytes/sizeof(uint), parts_n, parts_e, halo_faces, hf_pitchInBytes/sizeof(uint), dt);
 
 }
