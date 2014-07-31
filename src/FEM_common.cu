@@ -9,8 +9,8 @@ const FN_TYPE alpha = 12.02;
 const FN_TYPE S = 1;
 
 __global__ void stepKernel(FN_TYPE *nFn_src, FN_TYPE *cFn_src, FN_TYPE *nFn_dst,
-		FN_TYPE *cFn_dst, uint *fv, uint *t, uint *nbr, FN_TYPE *vtxW,
-		FN_TYPE *heW, float3 *grads, float3 *nfGrads, float3 *cfGrads, uint *vertex_faces,
+		FN_TYPE *cFn_dst, uint *fv, uint *nbr, FN_TYPE *vertex_weights, uint vv_pitch, FN_TYPE *vtxW,
+		float3 *grads, float3 *nfGrads, float3 *cfGrads, uint *vertex_faces,
 		FN_TYPE *face_weights, uint vf_pitch, uint *vertex_parts, uint *face_parts,
 		uint *halo_faces, uint hf_pitch, double dt) {
 
@@ -70,10 +70,10 @@ __global__ void stepKernel(FN_TYPE *nFn_src, FN_TYPE *cFn_src, FN_TYPE *nFn_dst,
 	FN_TYPE n = nFn_src[i] * vW;
 	FN_TYPE c = cFn_src[i] * vW;
 
-	end = t[i + 1];
-	for (int j = t[i]; j < end; j++) {
-		int nIdx = nbr[j];
-		FN_TYPE hW = heW[j];
+	end = nbr[i];
+	for (int j = 0; j < end; j++) {
+		int nIdx = nbr[vv_pitch*(j+1) + i];
+		FN_TYPE hW = vertex_weights[vv_pitch*j + i];
 		n += nFn_src[nIdx] * hW;
 		c += cFn_src[nIdx] * hW;
 	}
@@ -89,8 +89,8 @@ __global__ void stepKernel(FN_TYPE *nFn_src, FN_TYPE *cFn_src, FN_TYPE *nFn_dst,
 }
 
 extern "C" void step(FN_TYPE *nFn_src, FN_TYPE *cFn_src, FN_TYPE *nFn_dst,
-		FN_TYPE *cFn_dst, uint *fv, uint *t, uint *nbr, FN_TYPE *vtxW,
-		FN_TYPE *heW, float3 *grads, float3 *nfGrads, float3 *cfGrads, uint *vertex_faces,
+		FN_TYPE *cFn_dst, uint *fv, uint *nbr, FN_TYPE *vertex_weights, uint vv_pitchInBytes,
+		FN_TYPE *vtxW, float3 *grads, float3 *nfGrads, float3 *cfGrads, uint *vertex_faces,
 		FN_TYPE *face_weights, uint vf_pitchInBytes, uint *parts_n, uint *parts_e,
 		uint *halo_faces, uint hf_pitchInBytes, uint blocks, uint threads,
 		double dt) {
@@ -100,7 +100,7 @@ extern "C" void step(FN_TYPE *nFn_src, FN_TYPE *cFn_src, FN_TYPE *nFn_dst,
 
 
 	stepKernel<<<grid, block>>>(nFn_src, cFn_src, nFn_dst, cFn_dst,
-			fv, t, nbr, vtxW, heW, grads, nfGrads, cfGrads, vertex_faces,
+			fv, nbr, vertex_weights, vv_pitchInBytes/sizeof(uint), vtxW, grads, nfGrads, cfGrads, vertex_faces,
 			face_weights, vf_pitchInBytes/sizeof(uint), parts_n, parts_e, halo_faces, hf_pitchInBytes/sizeof(uint), dt);
 
 }
