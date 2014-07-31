@@ -15,14 +15,13 @@ __global__ void stepKernel(FN_TYPE *nFn_src, FN_TYPE *cFn_src, FN_TYPE *nFn_dst,
 		uint *halo_faces, uint hf_pitch, double dt) {
 
 	if (threadIdx.x >= halo_faces[blockIdx.x*hf_pitch+1])
-		return;
+				return;
 
 	/* face gradients *************************************/
 	int i = face_parts[blockIdx.x] + threadIdx.x;
 
 	if (i >= face_parts[blockIdx.x + 1]) {
-
-		i = i - face_parts[blockIdx.x + 1] + halo_faces[blockIdx.x*hf_pitch];
+		i += halo_faces[blockIdx.x*hf_pitch];
 
 		i = halo_faces[blockIdx.x*hf_pitch + i];
 	}

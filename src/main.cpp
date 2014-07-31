@@ -331,12 +331,11 @@ void initializeGPUData(int n) {
 		int patch = (element_parts[i+1]-element_parts[i])%32;
 		if (patch < 2)
 			patch+=32;
-		halo_faces[i*hf_max_size] = patch;
+		halo_faces[i*hf_max_size] = patch - element_parts[i+1];
 		halo_faces[i*hf_max_size+1] = (element_parts[i+1]-element_parts[i]) + halo_faces_part.size(); // last thread needed
 		max_size_e = std::max(max_size_e, (uint)(element_parts[i+1]-element_parts[i] + halo_faces_part.size()));
 
 		std::copy(halo_faces_part.begin(), halo_faces_part.end(), &halo_faces[i*hf_max_size + patch]);
-
 	}
 }
 
