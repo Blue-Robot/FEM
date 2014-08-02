@@ -16,13 +16,13 @@ __global__ void stepKernel(FN_TYPE *nFn_src, FN_TYPE *cFn_src, FN_TYPE *nFn_dst,
 		uint *halo_faces_keys, double dt) {
 
 	/* face gradients *************************************/
-	int i = face_parts[blockIdx.x] + threadIdx.x;
-
+	int i;
+	for (i = face_parts[blockIdx.x] + threadIdx.x; i < face_parts[blockIdx.x] + 3*blockDim.x; i+=blockDim.x) {
 	if (i >= face_parts[blockIdx.x + 1]) {
 
 		i = i - face_parts[blockIdx.x + 1] + halo_faces_keys[blockIdx.x];
 		if (i >= halo_faces_keys[blockIdx.x + 1])
-			return;
+			break;
 		i = halo_faces[i];
 	}
 
@@ -38,6 +38,7 @@ __global__ void stepKernel(FN_TYPE *nFn_src, FN_TYPE *cFn_src, FN_TYPE *nFn_dst,
 
 	nfGrads[i] = grad12 * nv12 + grad13 * nv13;
 	cfGrads[i] = grad12 * cv12 + grad13 * cv13;
+	}
 
 	__syncthreads();
 

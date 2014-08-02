@@ -282,7 +282,6 @@ void initializeGPUData(int n) {
 		halo_faces_keys[i+1] = halo_faces.size();
 		halo_vertices_keys[i+1] = halo_vertices.size();
 	}
-
 }
 
 double GPUrun(int n) {
@@ -291,7 +290,7 @@ double GPUrun(int n) {
 	int max_size_n = 0;
 	int max_size_e = 0;
 	for (int i = 0; i < n; i++) {
-		int size_n = node_parts[i+1] - node_parts[i] + halo_vertices_keys[i+1] - halo_vertices_keys[i];
+		int size_n = node_parts[i+1] - node_parts[i];
 		int size_e = element_parts[i+1] - element_parts[i] + halo_faces_keys[i+1] - halo_faces_keys[i];
 
 		max_size_n = std::max(max_size_n, size_n);
@@ -302,14 +301,14 @@ double GPUrun(int n) {
 		printf("ERROR: Too many nodes per Block! (%d %d)\n", n, max_size_n);
 		return -1.0;
 	}
-	if(max_size_e > 1024) {
-		printf("ERROR: Too many elements per Block! (%d %d)\n", n, max_size_e);
-		return -1.0;
-	}
+//	if(max_size_e > 1024) {
+//		printf("ERROR: Too many elements per Block! (%d %d)\n", n, max_size_e);
+//		return -1.0;
+//	}
 
 	int threads_n = ((max_size_n + 32 - 1) / 32) * 32;
 	int threads_e = ((max_size_e + 32 - 1) / 32) * 32;
-	int threads = std::max(threads_n, threads_e);
+	int threads = threads_n;
 	//end
 
 	FN_TYPE *dev_nFn_one;
