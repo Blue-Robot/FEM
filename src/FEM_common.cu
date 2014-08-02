@@ -25,66 +25,33 @@ __global__ void stepKernel(FN_TYPE *nFn_src, FN_TYPE *cFn_src, FN_TYPE *nFn_dst,
 			return;
 		i = halo_faces[i];
 	}
-	int first = fv[i * 3];
-	int second = fv[i * 3 + 1];
-	int third = fv[i * 3 + 2];
+	int fn_index[3] = {fv[i * 3], fv[i * 3 + 1], fv[i * 3 + 2]};
 
-	FN_TYPE nv1 = nFn_src[third];
-	FN_TYPE nv12 = nFn_src[first] - nv1;
-	FN_TYPE nv13 = nFn_src[second] - nv1;
-	FN_TYPE cv1 = cFn_src[third];
-	FN_TYPE cv12 = cFn_src[first] - cv1;
-	FN_TYPE cv13 = cFn_src[second] - cv1;
+	FN_TYPE nv1 = nFn_src[fn_index[2]];
+	FN_TYPE nv12 = nFn_src[fn_index[0]] - nv1;
+	FN_TYPE nv13 = nFn_src[fn_index[1]] - nv1;
+	FN_TYPE cv1 = cFn_src[fn_index[2]];
+	FN_TYPE cv12 = cFn_src[fn_index[0]] - cv1;
+	FN_TYPE cv13 = cFn_src[fn_index[1]] - cv1;
 
 	float3 grad12 = grads[i * 2];
 	float3 grad13 = grads[i * 2 + 1];
 
-	float3 nvGrad;
-	float3 cvGrad;
-	if (first >= vertex_parts[blockIdx.x] && first < vertex_parts[blockIdx.x+1]) {
-	nvGrad = (grad12 * nv12 + grad13 * nv13)*fv_weights[i * 3];
-	atomicAdd(&nvGrads[first].x, nvGrad.x);
-	atomicAdd(&nvGrads[first].y, nvGrad.y);
-	atomicAdd(&nvGrads[first].z, nvGrad.z);
+	for (int j = 0; j < 3; j++) {
+		if (fn_index[j] >= vertex_parts[blockIdx.x] && fn_index[j] < vertex_parts[blockIdx.x+1]) {
+			float3 nvGrad = (grad12 * nv12 + grad13 * nv13)*fv_weights[i * 3 + j];
+			atomicAdd(&nvGrads[fn_index[j]].x, nvGrad.x);
+			atomicAdd(&nvGrads[fn_index[j]].y, nvGrad.y);
+			atomicAdd(&nvGrads[fn_index[j]].z, nvGrad.z);
 
+			float3 cvGrad = (grad12 * cv12 + grad13 * cv13)*fv_weights[i * 3 + j];
+			atomicAdd(&cvGrads[fn_index[j]].x, cvGrad.x);
+			atomicAdd(&cvGrads[fn_index[j]].y, cvGrad.y);
+			atomicAdd(&cvGrads[fn_index[j]].z, cvGrad.z);
 
-	cvGrad = (grad12 * cv12 + grad13 * cv13)*fv_weights[i * 3];
-	atomicAdd(&cvGrads[first].x, cvGrad.x);
-	atomicAdd(&cvGrads[first].y, cvGrad.y);
-	atomicAdd(&cvGrads[first].z, cvGrad.z);
-
-	atomicAdd(&wg[first], fv_weights[i * 3]);
+			atomicAdd(&wg[fn_index[j]], fv_weights[i * 3 + j]);
+		}
 	}
-
-	if (second >= vertex_parts[blockIdx.x] && second < vertex_parts[blockIdx.x+1]) {
-	nvGrad = (grad12 * nv12 + grad13 * nv13)*fv_weights[i * 3 + 1];
-	atomicAdd(&nvGrads[second].x, nvGrad.x);
-	atomicAdd(&nvGrads[second].y, nvGrad.y);
-	atomicAdd(&nvGrads[second].z, nvGrad.z);
-
-	cvGrad = (grad12 * cv12 + grad13 * cv13)*fv_weights[i * 3 + 1];
-	atomicAdd(&cvGrads[second].x, cvGrad.x);
-	atomicAdd(&cvGrads[second].y, cvGrad.y);
-	atomicAdd(&cvGrads[second].z, cvGrad.z);
-
-	atomicAdd(&wg[second], fv_weights[i * 3 + 1]);
-	}
-
-
-	if (third >= vertex_parts[blockIdx.x] && third < vertex_parts[blockIdx.x+1]) {
-	nvGrad = (grad12 * nv12 + grad13 * nv13)*fv_weights[i * 3 + 2];
-	atomicAdd(&nvGrads[third].x, nvGrad.x);
-	atomicAdd(&nvGrads[third].y, nvGrad.y);
-	atomicAdd(&nvGrads[third].z, nvGrad.z);
-
-	cvGrad = (grad12 * cv12 + grad13 * cv13)*fv_weights[i * 3 + 2];
-	atomicAdd(&cvGrads[third].x, cvGrad.x);
-	atomicAdd(&cvGrads[third].y, cvGrad.y);
-	atomicAdd(&cvGrads[third].z, cvGrad.z);
-
-	atomicAdd(&wg[third], fv_weights[i * 3 + 2]);
-	}
-
 
 	__syncthreads();
 
