@@ -8,18 +8,26 @@ const FN_TYPE r = 1.52;
 const FN_TYPE alpha = 12.02;
 const FN_TYPE S = 1;
 
+extern __shared__ FN_TYPE s_mem[];
 __global__ void stepKernel(FN_TYPE *nFn_src, FN_TYPE *cFn_src, FN_TYPE *nFn_dst,
 		FN_TYPE *cFn_dst, uint *fv, FN_TYPE *fv_weights, uint *t,
-		uint *nbr, FN_TYPE *vtxW, FN_TYPE *heW, float3 *grads, float3 *nvGrads,
-		float3 *cvGrads, FN_TYPE *wg, uint *f, uint *faces,
-		FN_TYPE *fW, uint *vertex_parts, uint *face_parts, uint *halo_faces,
+		uint *nbr, FN_TYPE *vtxW, FN_TYPE *heW, float3 *grads, uint *vertex_parts, uint *face_parts, uint *halo_faces,
 		uint *halo_faces_keys, double dt) {
+
+	uint size = vertex_parts[blockIdx.x+1] - vertex_parts[blockIdx.x];
+	float3 *s_nvGrads = (float3 *)&s_mem[0];
+	float3 *s_cvGrads = &s_nvGrads[size];
+	FN_TYPE *s_wg = (FN_TYPE *)&s_cvGrads[size];
+	for (int i = threadIdx.x; i < 7*size; i += blockDim.x) {
+		s_mem[i] = 0.0;
+	}
+
+	__syncthreads();
 
 	/* face gradients *************************************/
 	int i = face_parts[blockIdx.x] + threadIdx.x;
 
 	if (i >= face_parts[blockIdx.x + 1]) {
-
 		i = i - face_parts[blockIdx.x + 1] + halo_faces_keys[blockIdx.x];
 		if (i >= halo_faces_keys[blockIdx.x + 1])
 			return;
@@ -34,22 +42,25 @@ __global__ void stepKernel(FN_TYPE *nFn_src, FN_TYPE *cFn_src, FN_TYPE *nFn_dst,
 	FN_TYPE cv12 = cFn_src[fn_index[0]] - cv1;
 	FN_TYPE cv13 = cFn_src[fn_index[1]] - cv1;
 
+	fn_index[0] -= vertex_parts[blockIdx.x];
+	fn_index[1] -= vertex_parts[blockIdx.x];
+	fn_index[2] -= vertex_parts[blockIdx.x];
+
 	float3 grad12 = grads[i * 2];
 	float3 grad13 = grads[i * 2 + 1];
-
 	for (int j = 0; j < 3; j++) {
-		if (fn_index[j] >= vertex_parts[blockIdx.x] && fn_index[j] < vertex_parts[blockIdx.x+1]) {
+		if (fn_index[j] >= 0 && fn_index[j] < size) {
 			float3 nvGrad = (grad12 * nv12 + grad13 * nv13)*fv_weights[i * 3 + j];
-			atomicAdd(&nvGrads[fn_index[j]].x, nvGrad.x);
-			atomicAdd(&nvGrads[fn_index[j]].y, nvGrad.y);
-			atomicAdd(&nvGrads[fn_index[j]].z, nvGrad.z);
+			atomicAdd(&s_nvGrads[fn_index[j]].x, nvGrad.x);
+			atomicAdd(&s_nvGrads[fn_index[j]].y, nvGrad.y);
+			atomicAdd(&s_nvGrads[fn_index[j]].z, nvGrad.z);
 
 			float3 cvGrad = (grad12 * cv12 + grad13 * cv13)*fv_weights[i * 3 + j];
-			atomicAdd(&cvGrads[fn_index[j]].x, cvGrad.x);
-			atomicAdd(&cvGrads[fn_index[j]].y, cvGrad.y);
-			atomicAdd(&cvGrads[fn_index[j]].z, cvGrad.z);
+			atomicAdd(&s_cvGrads[fn_index[j]].x, cvGrad.x);
+			atomicAdd(&s_cvGrads[fn_index[j]].y, cvGrad.y);
+			atomicAdd(&s_cvGrads[fn_index[j]].z, cvGrad.z);
 
-			atomicAdd(&wg[fn_index[j]], fv_weights[i * 3 + j]);
+			atomicAdd(&s_wg[fn_index[j]], fv_weights[i * 3 + j]);
 		}
 	}
 
@@ -64,8 +75,8 @@ __global__ void stepKernel(FN_TYPE *nFn_src, FN_TYPE *cFn_src, FN_TYPE *nFn_dst,
 
 	/* vertex gradients ***********************************/
 
-	FN_TYPE dotP = dot(nvGrads[i] / wg[i], cvGrads[i] / wg[i]);
-	if (wg[i] <= 0)
+	FN_TYPE dotP = dot(s_nvGrads[threadIdx.x] / s_wg[threadIdx.x], s_cvGrads[threadIdx.x] / s_wg[threadIdx.x]);
+	if (s_wg[threadIdx.x] <= 0)
 		dotP = 0;
 
 	/* laplacian ******************************************/
@@ -93,16 +104,14 @@ __global__ void stepKernel(FN_TYPE *nFn_src, FN_TYPE *cFn_src, FN_TYPE *nFn_dst,
 
 extern "C" void step(FN_TYPE *nFn_src, FN_TYPE *cFn_src, FN_TYPE *nFn_dst,
 		FN_TYPE *cFn_dst, uint *fv, FN_TYPE *fv_weights, uint *t,
-		uint *nbr, FN_TYPE *vtxW, FN_TYPE *heW, float3 *grads, float3 *nvGrads,
-		float3 *cvGrads, FN_TYPE *wg, uint *f, uint *faces,
-		FN_TYPE *fW, uint *parts_n, uint *parts_e, uint *halo_faces,
-		uint *halo_faces_keys, uint blocks, uint threads, double dt) {
+		uint *nbr, FN_TYPE *vtxW, FN_TYPE *heW, float3 *grads,
+		 uint *parts_n, uint *parts_e, uint *halo_faces,
+		uint *halo_faces_keys, uint blocks, uint threads, double dt, uint smem_size) {
 
 	dim3 block(threads, 1, 1);
 	dim3 grid(blocks, 1, 1);
 
-	stepKernel<<<grid, block>>>(nFn_src, cFn_src, nFn_dst, cFn_dst,
-			fv, fv_weights, t, nbr, vtxW, heW, grads, nvGrads, cvGrads, wg, f,
-			faces, fW, parts_n, parts_e, halo_faces, halo_faces_keys, dt);
+	stepKernel<<<grid, block, smem_size>>>(nFn_src, cFn_src, nFn_dst, cFn_dst,
+			fv, fv_weights, t, nbr, vtxW, heW, grads, parts_n, parts_e, halo_faces, halo_faces_keys, dt);
 
 }

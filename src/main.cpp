@@ -90,8 +90,8 @@ uint *halo_faces_keys;
 uint *halo_vertices_keys;
 
 //batch configuration
-int start_n = 39; // number of partitions to start with
-int end_n = 39; // number of partitions to end with
+int start_n = 26; // number of partitions to start with
+int end_n = 26; // number of partitions to end with
 
 using namespace OpenMesh;
 
@@ -170,7 +170,7 @@ void initializeCUDA() {
 	checkCudaErrors(cudaSetDevice(gpuGetMaxGflopsDeviceId()));
 
 	//checkCudaErrors(cudaDeviceSetSharedMemConfig(cudaSharedMemBankSizeFourByte));
-	//checkCudaErrors(cudaDeviceSetCacheConfig(cudaFuncCachePreferEqual));
+	//checkCudaErrors(cudaDeviceSetCacheConfig(cudaFuncCachePreferShared));
 }
 
 void initializeGPUData(int n) {
@@ -296,7 +296,7 @@ double GPUrun(int n) {
 	int max_size_n = 0;
 	int max_size_e = 0;
 	for (int i = 0; i < n; i++) {
-		int size_n = node_parts[i+1] - node_parts[i] + halo_vertices_keys[i+1] - halo_vertices_keys[i];
+		int size_n = node_parts[i+1] - node_parts[i];
 		int size_e = element_parts[i+1] - element_parts[i] + halo_faces_keys[i+1] - halo_faces_keys[i];
 
 		max_size_n = std::max(max_size_n, size_n);
@@ -315,6 +315,7 @@ double GPUrun(int n) {
 	int threads_n = ((max_size_n + 32 - 1) / 32) * 32;
 	int threads_e = ((max_size_e + 32 - 1) / 32) * 32;
 	int threads = std::max(threads_n, threads_e);
+	uint smem_size = max_size_n*7*4;
 	//end
 
 	FN_TYPE *dev_nFn_one;
@@ -404,9 +405,9 @@ double GPUrun(int n) {
 
 
 	cudaProfilerStart();
-	step(dev_nFn_one, dev_cFn_one, dev_nFn_two, dev_cFn_two, dev_faceVertices, dev_fv_weights, dev_nbrTracker, dev_nbr, dev_vtxW, dev_heWeights, dev_heGradients, dev_nVertexGradients, dev_cVertexGradients, dev_wg, dev_faceTracker, dev_vertexFaces, dev_faceWeights, dev_parts_n, dev_parts_e, dev_halo_faces, dev_halo_faces_keys, n, threads, dt);
+	step(dev_nFn_one, dev_cFn_one, dev_nFn_two, dev_cFn_two, dev_faceVertices, dev_fv_weights, dev_nbrTracker, dev_nbr, dev_vtxW, dev_heWeights, dev_heGradients, dev_parts_n, dev_parts_e, dev_halo_faces, dev_halo_faces_keys, n, threads, dt, smem_size);
 	cudaProfilerStop();
-	step(dev_nFn_two, dev_cFn_two, dev_nFn_one, dev_cFn_one, dev_faceVertices, dev_fv_weights, dev_nbrTracker, dev_nbr, dev_vtxW, dev_heWeights, dev_heGradients, dev_nVertexGradients, dev_cVertexGradients, dev_wg, dev_faceTracker, dev_vertexFaces, dev_faceWeights, dev_parts_n, dev_parts_e, dev_halo_faces, dev_halo_faces_keys, n, threads, dt);
+	step(dev_nFn_two, dev_cFn_two, dev_nFn_one, dev_cFn_one, dev_faceVertices, dev_fv_weights, dev_nbrTracker, dev_nbr, dev_vtxW, dev_heWeights, dev_heGradients, dev_parts_n, dev_parts_e, dev_halo_faces, dev_halo_faces_keys, n, threads, dt, smem_size);
 
 
 
@@ -476,8 +477,8 @@ double GPUrun(int n) {
 	cudaEventRecord(start, 0);
 
 	for (int i = 0; i < maxIt; i++) {
-		step(dev_nFn_one, dev_cFn_one, dev_nFn_two, dev_cFn_two, dev_faceVertices, dev_fv_weights, dev_nbrTracker, dev_nbr, dev_vtxW, dev_heWeights, dev_heGradients, dev_nVertexGradients, dev_cVertexGradients, dev_wg, dev_faceTracker, dev_vertexFaces, dev_faceWeights, dev_parts_n, dev_parts_e, dev_halo_faces, dev_halo_faces_keys, n, threads, dt);
-		step(dev_nFn_two, dev_cFn_two, dev_nFn_one, dev_cFn_one, dev_faceVertices, dev_fv_weights, dev_nbrTracker, dev_nbr, dev_vtxW, dev_heWeights, dev_heGradients, dev_nVertexGradients, dev_cVertexGradients, dev_wg, dev_faceTracker, dev_vertexFaces, dev_faceWeights, dev_parts_n, dev_parts_e, dev_halo_faces, dev_halo_faces_keys, n, threads, dt);
+		step(dev_nFn_one, dev_cFn_one, dev_nFn_two, dev_cFn_two, dev_faceVertices, dev_fv_weights, dev_nbrTracker, dev_nbr, dev_vtxW, dev_heWeights, dev_heGradients, dev_parts_n, dev_parts_e, dev_halo_faces, dev_halo_faces_keys, n, threads, dt, smem_size);
+		step(dev_nFn_two, dev_cFn_two, dev_nFn_one, dev_cFn_one, dev_faceVertices, dev_fv_weights, dev_nbrTracker, dev_nbr, dev_vtxW, dev_heWeights, dev_heGradients, dev_parts_n, dev_parts_e, dev_halo_faces, dev_halo_faces_keys, n, threads, dt, smem_size);
 	}
 
 	cudaEventRecord(stop, 0);
@@ -496,6 +497,8 @@ double GPUrun(int n) {
 	// Free Data
 	checkCudaErrors(cudaFree(dev_nFn_one));
 	checkCudaErrors(cudaFree(dev_cFn_one));
+	checkCudaErrors(cudaFree(dev_nFn_two));
+	checkCudaErrors(cudaFree(dev_cFn_two));
 	checkCudaErrors(cudaFree(dev_nbrTracker));
 	checkCudaErrors(cudaFree(dev_nbr));
 	checkCudaErrors(cudaFree(dev_vtxW));
@@ -505,14 +508,20 @@ double GPUrun(int n) {
 
 	checkCudaErrors(cudaFree(dev_halo_faces));
 	checkCudaErrors(cudaFree(dev_halo_faces_keys));
+	checkCudaErrors(cudaFree(dev_halo_vertices));
+	checkCudaErrors(cudaFree(dev_halo_vertices_keys));
 
 	checkCudaErrors(cudaFree(dev_faceVertices));
 	checkCudaErrors(cudaFree(dev_heGradients));
 	checkCudaErrors(cudaFree(dev_nFaceGradients));
 	checkCudaErrors(cudaFree(dev_cFaceGradients));
+	checkCudaErrors(cudaFree(dev_nVertexGradients));
+	checkCudaErrors(cudaFree(dev_cVertexGradients));
+	checkCudaErrors(cudaFree(dev_wg));
 	checkCudaErrors(cudaFree(dev_faceTracker));
 	checkCudaErrors(cudaFree(dev_vertexFaces));
 	checkCudaErrors(cudaFree(dev_faceWeights));
+	checkCudaErrors(cudaFree(dev_fv_weights));
 
 	return 1000*elapsedTime/maxIt;
 }
