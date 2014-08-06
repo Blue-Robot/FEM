@@ -11,8 +11,7 @@ const FN_TYPE S = 1;
 extern __shared__ FN_TYPE s_mem[];
 __global__ void stepKernel(FN_TYPE *nFn_src, FN_TYPE *cFn_src, FN_TYPE *nFn_dst,
 		FN_TYPE *cFn_dst, uint *fv, FN_TYPE *fv_weights, uint fv_pitch,
-		uint *nbr, FN_TYPE *vtxW, FN_TYPE *vertex_weights, uint vv_pitch, uint vv_size, float4 *grads, uint he_pitch, uint *vertex_parts, uint *face_parts, uint *halo_faces,
-		uint *halo_faces_keys, double dt) {
+		uint *nbr, FN_TYPE *vtxW, FN_TYPE *vertex_weights, uint vv_pitch, uint vv_size, float4 *grads, uint he_pitch, uint *vertex_parts, uint *block_face_count, double dt) {
 
 	uint size = vertex_parts[blockIdx.x+1] - vertex_parts[blockIdx.x];
 	float3 *s_nvGrads = (float3 *)&s_mem[0];
@@ -25,14 +24,9 @@ __global__ void stepKernel(FN_TYPE *nFn_src, FN_TYPE *cFn_src, FN_TYPE *nFn_dst,
 	__syncthreads();
 
 	/* face gradients *************************************/
-	int i = face_parts[blockIdx.x] + threadIdx.x;
+	if (threadIdx.x >= block_face_count[blockIdx.x])
+		return;
 
-	if (i >= face_parts[blockIdx.x + 1]) {
-		i = i - face_parts[blockIdx.x + 1] + halo_faces_keys[blockIdx.x];
-		if (i >= halo_faces_keys[blockIdx.x + 1])
-			return;
-		i = halo_faces[i];
-	}
 	int fn_index[3] = {fv[blockIdx.x*3*fv_pitch + threadIdx.x], fv[blockIdx.x*3*fv_pitch + fv_pitch + threadIdx.x], fv[blockIdx.x*3*fv_pitch + 2*fv_pitch + threadIdx.x]};
 
 	FN_TYPE nv1 = nFn_src[fn_index[2]];
@@ -68,7 +62,7 @@ __global__ void stepKernel(FN_TYPE *nFn_src, FN_TYPE *cFn_src, FN_TYPE *nFn_dst,
 	__syncthreads();
 
 	// Adjust i
-	i = vertex_parts[blockIdx.x] + threadIdx.x;
+	int i = vertex_parts[blockIdx.x] + threadIdx.x;
 
 	// Kill unnecessary threads
 	if (i >= vertex_parts[blockIdx.x + 1])
@@ -106,13 +100,13 @@ __global__ void stepKernel(FN_TYPE *nFn_src, FN_TYPE *cFn_src, FN_TYPE *nFn_dst,
 extern "C" void step(FN_TYPE *nFn_src, FN_TYPE *cFn_src, FN_TYPE *nFn_dst,
 		FN_TYPE *cFn_dst, uint *fv, FN_TYPE *fv_weights, uint fv_pitchInBytes,
 		uint *nbr, FN_TYPE *vtxW, FN_TYPE *vertex_weights, uint vv_pitchInBytes, uint vv_size, float4 *grads, uint he_pitchInBytes,
-		 uint *parts_n, uint *parts_e, uint *halo_faces,
-		uint *halo_faces_keys, uint blocks, uint threads, double dt, uint smem_size) {
+		uint *parts_n, uint *block_face_count,
+		uint blocks, uint threads, double dt, uint smem_size) {
 
 	dim3 block(threads, 1, 1);
 	dim3 grid(blocks, 1, 1);
 
 	stepKernel<<<grid, block, smem_size>>>(nFn_src, cFn_src, nFn_dst, cFn_dst,
-			fv, fv_weights, fv_pitchInBytes/sizeof(uint), nbr, vtxW, vertex_weights, vv_pitchInBytes/sizeof(uint), vv_size, grads, he_pitchInBytes/sizeof(float4), parts_n, parts_e, halo_faces, halo_faces_keys, dt);
+			fv, fv_weights, fv_pitchInBytes/sizeof(uint), nbr, vtxW, vertex_weights, vv_pitchInBytes/sizeof(uint), vv_size, grads, he_pitchInBytes/sizeof(float4), parts_n, block_face_count, dt);
 
 }
