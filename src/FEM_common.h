@@ -13,6 +13,7 @@ extern "C" void step (
 		uint vv_pitchInBytes,
 		uint vv_size,
 		float3 *grads,
+		uint he_pitchInBytes,
 		uint *parts_n,
 		uint *parts_e,
 		uint *halo_faces,

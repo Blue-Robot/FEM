@@ -11,7 +11,7 @@ const FN_TYPE S = 1;
 extern __shared__ FN_TYPE s_mem[];
 __global__ void stepKernel(FN_TYPE *nFn_src, FN_TYPE *cFn_src, FN_TYPE *nFn_dst,
 		FN_TYPE *cFn_dst, uint *fv, FN_TYPE *fv_weights,
-		uint *nbr, FN_TYPE *vtxW, FN_TYPE *vertex_weights, uint vv_pitch, uint vv_size, float3 *grads, uint *vertex_parts, uint *face_parts, uint *halo_faces,
+		uint *nbr, FN_TYPE *vtxW, FN_TYPE *vertex_weights, uint vv_pitch, uint vv_size, float3 *grads, uint he_pitch, uint *vertex_parts, uint *face_parts, uint *halo_faces,
 		uint *halo_faces_keys, double dt) {
 
 	uint size = vertex_parts[blockIdx.x+1] - vertex_parts[blockIdx.x];
@@ -46,8 +46,9 @@ __global__ void stepKernel(FN_TYPE *nFn_src, FN_TYPE *cFn_src, FN_TYPE *nFn_dst,
 	fn_index[1] -= vertex_parts[blockIdx.x];
 	fn_index[2] -= vertex_parts[blockIdx.x];
 
-	float3 grad12 = grads[i * 2];
-	float3 grad13 = grads[i * 2 + 1];
+	float3 grad12 = grads[blockIdx.x*2*he_pitch + threadIdx.x];
+	float3 grad13 = grads[blockIdx.x*2*he_pitch + he_pitch + threadIdx.x];
+
 	for (int j = 0; j < 3; j++) {
 		if (fn_index[j] >= 0 && fn_index[j] < size) {
 			float3 nvGrad = (grad12 * nv12 + grad13 * nv13)*fv_weights[i * 3 + j];
@@ -104,7 +105,7 @@ __global__ void stepKernel(FN_TYPE *nFn_src, FN_TYPE *cFn_src, FN_TYPE *nFn_dst,
 
 extern "C" void step(FN_TYPE *nFn_src, FN_TYPE *cFn_src, FN_TYPE *nFn_dst,
 		FN_TYPE *cFn_dst, uint *fv, FN_TYPE *fv_weights,
-		uint *nbr, FN_TYPE *vtxW, FN_TYPE *vertex_weights, uint vv_pitchInBytes, uint vv_size, float3 *grads,
+		uint *nbr, FN_TYPE *vtxW, FN_TYPE *vertex_weights, uint vv_pitchInBytes, uint vv_size, float3 *grads, uint he_pitchInBytes,
 		 uint *parts_n, uint *parts_e, uint *halo_faces,
 		uint *halo_faces_keys, uint blocks, uint threads, double dt, uint smem_size) {
 
@@ -112,6 +113,6 @@ extern "C" void step(FN_TYPE *nFn_src, FN_TYPE *cFn_src, FN_TYPE *nFn_dst,
 	dim3 grid(blocks, 1, 1);
 
 	stepKernel<<<grid, block, smem_size>>>(nFn_src, cFn_src, nFn_dst, cFn_dst,
-			fv, fv_weights, nbr, vtxW, vertex_weights, vv_pitchInBytes/sizeof(uint), vv_size, grads, parts_n, parts_e, halo_faces, halo_faces_keys, dt);
+			fv, fv_weights, nbr, vtxW, vertex_weights, vv_pitchInBytes/sizeof(uint), vv_size, grads, he_pitchInBytes/sizeof(float3), parts_n, parts_e, halo_faces, halo_faces_keys, dt);
 
 }
