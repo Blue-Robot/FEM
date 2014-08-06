@@ -10,6 +10,7 @@ extern "C" void step (
 		uint fv_pitchInBytes,
 		uint *nbr,
 		FN_TYPE *vtxW,
+		uint vw_pitchInBytes,
 		FN_TYPE *vertex_weights,
 		uint vv_pitchInBytes,
 		uint vv_size,
