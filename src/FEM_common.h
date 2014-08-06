@@ -7,6 +7,7 @@ extern "C" void step (
 		FN_TYPE *cFn_dst,
 		uint *fv,
 		FN_TYPE *fv_weights,
+		uint fv_pitchInBytes,
 		uint *nbr,
 		FN_TYPE *vtxW,
 		FN_TYPE *vertex_weights,
