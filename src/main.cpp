@@ -94,7 +94,7 @@ FN_TYPE *vertex_weights;
 uint vv_max_block_size;
 uint vv_max_neighbors;
 
-float3 *he_grads;
+float4 *he_grads;
 uint he_max_size;
 
 //batch configuration
@@ -337,25 +337,25 @@ void initializeGPUData(int n) {
 		he_max_size = std::max(he_max_size, he_size);
 	}
 
-	he_grads = new float3[n*2*he_max_size];
+	he_grads = new float4[n*2*he_max_size];
 	for (int i = 0; i < n; i++) {
 		for (int j = 0; j < element_parts[i+1] - element_parts[i]; j++) {
 			FaceHandle f = orderedMesh.face_handle(j+element_parts[i]);
 			OpenMesh::Vec3f vec12 = mStats.gradVec12[f.idx()];
-			he_grads[i*2*he_max_size + j] = make_float3(vec12.values_[0], vec12.values_[1], vec12.values_[2]);
+			he_grads[i*2*he_max_size + j] = make_float4(vec12.values_[0], vec12.values_[1], vec12.values_[2], 0.0);
 
 			OpenMesh::Vec3f vec13 = mStats.gradVec13[f.idx()];
-			he_grads[i*2*he_max_size + he_max_size + j] = make_float3(vec13.values_[0], vec13.values_[1], vec13.values_[2]);
+			he_grads[i*2*he_max_size + he_max_size + j] = make_float4(vec13.values_[0], vec13.values_[1], vec13.values_[2], 0.0);
 		}
 
 		for (int j = 0; j < halo_faces_keys[i+1] - halo_faces_keys[i]; j++) {
 			FaceHandle f = orderedMesh.face_handle(halo_faces[j+halo_faces_keys[i]]);
 
 			OpenMesh::Vec3f vec12 = mStats.gradVec12[f.idx()];
-			he_grads[i*2*he_max_size + j + element_parts[i+1] - element_parts[i]] = make_float3(vec12.values_[0], vec12.values_[1], vec12.values_[2]);
+			he_grads[i*2*he_max_size + j + element_parts[i+1] - element_parts[i]] = make_float4(vec12.values_[0], vec12.values_[1], vec12.values_[2], 0.0);
 
 			OpenMesh::Vec3f vec13 = mStats.gradVec13[f.idx()];
-			he_grads[i*2*he_max_size + he_max_size + j + element_parts[i+1] - element_parts[i]] = make_float3(vec13.values_[0], vec13.values_[1], vec13.values_[2]);
+			he_grads[i*2*he_max_size + he_max_size + j + element_parts[i+1] - element_parts[i]] = make_float4(vec13.values_[0], vec13.values_[1], vec13.values_[2], 0.0);
 		}
 
 
@@ -442,7 +442,7 @@ double GPUrun(int n) {
 	cudaExtent vertex_weights_e = make_cudaExtent(vv_max_block_size*sizeof(FN_TYPE), vv_max_neighbors, n);
 	checkCudaErrors(cudaMalloc3D(&dev_vertex_weights, vertex_weights_e));
 
-	cudaExtent he_grads_e = make_cudaExtent(he_max_size*sizeof(float3), 2, n);
+	cudaExtent he_grads_e = make_cudaExtent(he_max_size*sizeof(float4), 2, n);
 	checkCudaErrors(cudaMalloc3D(&dev_he_grads, he_grads_e));
 
 	checkCudaErrors(cudaMalloc(&dev_halo_faces, sizeof(uint)*halo_faces.size()));
@@ -485,7 +485,7 @@ double GPUrun(int n) {
 
 	cudaMemcpy3DParms he_grads_p = {0};
 	he_grads_p.dstPtr = dev_he_grads;
-	he_grads_p.srcPtr = make_cudaPitchedPtr(he_grads, he_max_size*sizeof(float3), he_max_size, 2);
+	he_grads_p.srcPtr = make_cudaPitchedPtr(he_grads, he_max_size*sizeof(float4), he_max_size, 2);
 	he_grads_p.extent = he_grads_e;
 	he_grads_p.kind = cudaMemcpyHostToDevice;
 	checkCudaErrors(cudaMemcpy3D(&he_grads_p));
@@ -514,9 +514,9 @@ double GPUrun(int n) {
 
 
 	cudaProfilerStart();
-	step(dev_nFn_one, dev_cFn_one, dev_nFn_two, dev_cFn_two, dev_faceVertices, dev_fv_weights, (uint *)dev_nbr_v.ptr, dev_vtxW, (FN_TYPE *)dev_vertex_weights.ptr, dev_nbr_v.pitch, vv_max_neighbors, (float3 *)dev_he_grads.ptr, dev_he_grads.pitch, dev_parts_n, dev_parts_e, dev_halo_faces, dev_halo_faces_keys, n, threads, dt, smem_size);
+	step(dev_nFn_one, dev_cFn_one, dev_nFn_two, dev_cFn_two, dev_faceVertices, dev_fv_weights, (uint *)dev_nbr_v.ptr, dev_vtxW, (FN_TYPE *)dev_vertex_weights.ptr, dev_nbr_v.pitch, vv_max_neighbors, (float4 *)dev_he_grads.ptr, dev_he_grads.pitch, dev_parts_n, dev_parts_e, dev_halo_faces, dev_halo_faces_keys, n, threads, dt, smem_size);
 	cudaProfilerStop();
-	//step(dev_nFn_two, dev_cFn_two, dev_nFn_one, dev_cFn_one, dev_faceVertices, dev_fv_weights, (uint *)dev_nbr_v.ptr, dev_vtxW, (FN_TYPE *)dev_vertex_weights.ptr, dev_nbr_v.pitch, vv_max_neighbors, (float3 *)dev_he_grads.ptr, dev_he_grads.pitch, dev_parts_n, dev_parts_e, dev_halo_faces, dev_halo_faces_keys, n, threads, dt, smem_size);
+	step(dev_nFn_two, dev_cFn_two, dev_nFn_one, dev_cFn_one, dev_faceVertices, dev_fv_weights, (uint *)dev_nbr_v.ptr, dev_vtxW, (FN_TYPE *)dev_vertex_weights.ptr, dev_nbr_v.pitch, vv_max_neighbors, (float4 *)dev_he_grads.ptr, dev_he_grads.pitch, dev_parts_n, dev_parts_e, dev_halo_faces, dev_halo_faces_keys, n, threads, dt, smem_size);
 
 
 
@@ -586,8 +586,8 @@ double GPUrun(int n) {
 	cudaEventRecord(start, 0);
 
 	for (int i = 0; i < maxIt; i++) {
-		step(dev_nFn_one, dev_cFn_one, dev_nFn_two, dev_cFn_two, dev_faceVertices, dev_fv_weights, (uint *)dev_nbr_v.ptr, dev_vtxW, (FN_TYPE *)dev_vertex_weights.ptr, dev_nbr_v.pitch, vv_max_neighbors, (float3 *)dev_he_grads.ptr, dev_he_grads.pitch, dev_parts_n, dev_parts_e, dev_halo_faces, dev_halo_faces_keys, n, threads, dt, smem_size);
-		step(dev_nFn_two, dev_cFn_two, dev_nFn_one, dev_cFn_one, dev_faceVertices, dev_fv_weights, (uint *)dev_nbr_v.ptr, dev_vtxW, (FN_TYPE *)dev_vertex_weights.ptr, dev_nbr_v.pitch, vv_max_neighbors, (float3 *)dev_he_grads.ptr, dev_he_grads.pitch, dev_parts_n, dev_parts_e, dev_halo_faces, dev_halo_faces_keys, n, threads, dt, smem_size);
+		step(dev_nFn_one, dev_cFn_one, dev_nFn_two, dev_cFn_two, dev_faceVertices, dev_fv_weights, (uint *)dev_nbr_v.ptr, dev_vtxW, (FN_TYPE *)dev_vertex_weights.ptr, dev_nbr_v.pitch, vv_max_neighbors, (float4 *)dev_he_grads.ptr, dev_he_grads.pitch, dev_parts_n, dev_parts_e, dev_halo_faces, dev_halo_faces_keys, n, threads, dt, smem_size);
+		step(dev_nFn_two, dev_cFn_two, dev_nFn_one, dev_cFn_one, dev_faceVertices, dev_fv_weights, (uint *)dev_nbr_v.ptr, dev_vtxW, (FN_TYPE *)dev_vertex_weights.ptr, dev_nbr_v.pitch, vv_max_neighbors, (float4 *)dev_he_grads.ptr, dev_he_grads.pitch, dev_parts_n, dev_parts_e, dev_halo_faces, dev_halo_faces_keys, n, threads, dt, smem_size);
 	}
 
 	cudaEventRecord(stop, 0);

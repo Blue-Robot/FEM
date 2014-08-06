@@ -12,7 +12,7 @@ extern "C" void step (
 		FN_TYPE *vertex_weights,
 		uint vv_pitchInBytes,
 		uint vv_size,
-		float3 *grads,
+		float4 *grads,
 		uint he_pitchInBytes,
 		uint *parts_n,
 		uint *parts_e,
