@@ -103,8 +103,8 @@ uint max_face_count;
 uint *block_face_count;
 
 //batch configuration
-int start_n = 26; // number of partitions to start with
-int end_n = 26; // number of partitions to end with
+int start_n = 365; // number of partitions to start with
+int end_n = 385; // number of partitions to end with
 
 using namespace OpenMesh;
 
@@ -564,6 +564,11 @@ double GPUrun(int n) {
 
 	checkCudaErrors(cudaMemcpy(dev_nFn_one, nFn, sizeof(FN_TYPE)*numVtx, cudaMemcpyHostToDevice));
 	checkCudaErrors(cudaMemcpy(dev_cFn_one, cFn, sizeof(FN_TYPE)*numVtx, cudaMemcpyHostToDevice));
+	cudaChannelFormatDesc desc = cudaCreateChannelDesc<FN_TYPE>();
+	bindN1Texture(dev_nFn_one, desc, numVtx*sizeof(FN_TYPE));
+	bindC1Texture(dev_cFn_one, desc, numVtx*sizeof(FN_TYPE));
+	bindN2Texture(dev_nFn_two, desc, numVtx*sizeof(FN_TYPE));
+	bindC2Texture(dev_cFn_two, desc, numVtx*sizeof(FN_TYPE));
 	//checkCudaErrors(cudaMemcpy(dev_nbrTracker, nbrTracker, sizeof(uint)*(numVtx+1), cudaMemcpyHostToDevice));
 	//checkCudaErrors(cudaMemcpy(dev_nbr, neighbors, sizeof(uint)*numAngles, cudaMemcpyHostToDevice));
 	//checkCudaErrors(cudaMemcpy(dev_vtxW, mStats.wVtx, sizeof(FN_TYPE)*numVtx, cudaMemcpyHostToDevice));
@@ -585,9 +590,9 @@ double GPUrun(int n) {
 
 
 	cudaProfilerStart();
-	step(dev_nFn_one, dev_cFn_one, dev_nFn_two, dev_cFn_two, (uint *)dev_face_vertices.ptr, (FN_TYPE *)dev_fv_weights_new.ptr, dev_face_vertices.pitch, (uint *)dev_nbr_v.ptr, dev_vtxW, vw_pitchInBytes, (FN_TYPE *)dev_vertex_weights.ptr, dev_nbr_v.pitch, vv_max_neighbors, (float4 *)dev_he_grads.ptr, dev_he_grads.pitch, dev_parts_n, dev_block_face_count, n, threads, dt, smem_size);
+	step(dev_nFn_one, dev_cFn_one, dev_nFn_two, dev_cFn_two, (uint *)dev_face_vertices.ptr, (FN_TYPE *)dev_fv_weights_new.ptr, dev_face_vertices.pitch, (uint *)dev_nbr_v.ptr, dev_vtxW, vw_pitchInBytes, (FN_TYPE *)dev_vertex_weights.ptr, dev_nbr_v.pitch, vv_max_neighbors, (float4 *)dev_he_grads.ptr, dev_he_grads.pitch, dev_parts_n, dev_block_face_count, n, threads, dt, smem_size, true);
 	cudaProfilerStop();
-	step(dev_nFn_two, dev_cFn_two, dev_nFn_one, dev_cFn_one, (uint *)dev_face_vertices.ptr, (FN_TYPE *)dev_fv_weights_new.ptr, dev_face_vertices.pitch, (uint *)dev_nbr_v.ptr, dev_vtxW, vw_pitchInBytes, (FN_TYPE *)dev_vertex_weights.ptr, dev_nbr_v.pitch, vv_max_neighbors, (float4 *)dev_he_grads.ptr, dev_he_grads.pitch, dev_parts_n, dev_block_face_count, n, threads, dt, smem_size);
+	step(dev_nFn_two, dev_cFn_two, dev_nFn_one, dev_cFn_one, (uint *)dev_face_vertices.ptr, (FN_TYPE *)dev_fv_weights_new.ptr, dev_face_vertices.pitch, (uint *)dev_nbr_v.ptr, dev_vtxW, vw_pitchInBytes, (FN_TYPE *)dev_vertex_weights.ptr, dev_nbr_v.pitch, vv_max_neighbors, (float4 *)dev_he_grads.ptr, dev_he_grads.pitch, dev_parts_n, dev_block_face_count, n, threads, dt, smem_size, false);
 
 
 
@@ -657,8 +662,8 @@ double GPUrun(int n) {
 	cudaEventRecord(start, 0);
 
 	for (int i = 0; i < maxIt; i++) {
-		step(dev_nFn_one, dev_cFn_one, dev_nFn_two, dev_cFn_two, (uint *)dev_face_vertices.ptr, (FN_TYPE *)dev_fv_weights_new.ptr, dev_face_vertices.pitch, (uint *)dev_nbr_v.ptr, dev_vtxW, vw_pitchInBytes, (FN_TYPE *)dev_vertex_weights.ptr, dev_nbr_v.pitch, vv_max_neighbors, (float4 *)dev_he_grads.ptr, dev_he_grads.pitch, dev_parts_n, dev_block_face_count, n, threads, dt, smem_size);
-		step(dev_nFn_two, dev_cFn_two, dev_nFn_one, dev_cFn_one, (uint *)dev_face_vertices.ptr, (FN_TYPE *)dev_fv_weights_new.ptr, dev_face_vertices.pitch, (uint *)dev_nbr_v.ptr, dev_vtxW, vw_pitchInBytes, (FN_TYPE *)dev_vertex_weights.ptr, dev_nbr_v.pitch, vv_max_neighbors, (float4 *)dev_he_grads.ptr, dev_he_grads.pitch, dev_parts_n, dev_block_face_count, n, threads, dt, smem_size);
+		step(dev_nFn_one, dev_cFn_one, dev_nFn_two, dev_cFn_two, (uint *)dev_face_vertices.ptr, (FN_TYPE *)dev_fv_weights_new.ptr, dev_face_vertices.pitch, (uint *)dev_nbr_v.ptr, dev_vtxW, vw_pitchInBytes, (FN_TYPE *)dev_vertex_weights.ptr, dev_nbr_v.pitch, vv_max_neighbors, (float4 *)dev_he_grads.ptr, dev_he_grads.pitch, dev_parts_n, dev_block_face_count, n, threads, dt, smem_size, true);
+		step(dev_nFn_two, dev_cFn_two, dev_nFn_one, dev_cFn_one, (uint *)dev_face_vertices.ptr, (FN_TYPE *)dev_fv_weights_new.ptr, dev_face_vertices.pitch, (uint *)dev_nbr_v.ptr, dev_vtxW, vw_pitchInBytes, (FN_TYPE *)dev_vertex_weights.ptr, dev_nbr_v.pitch, vv_max_neighbors, (float4 *)dev_he_grads.ptr, dev_he_grads.pitch, dev_parts_n, dev_block_face_count, n, threads, dt, smem_size, false);
 	}
 
 	cudaEventRecord(stop, 0);
@@ -702,6 +707,11 @@ double GPUrun(int n) {
 	checkCudaErrors(cudaFree(dev_vertexFaces));
 	checkCudaErrors(cudaFree(dev_faceWeights));
 	checkCudaErrors(cudaFree(dev_fv_weights));
+
+	unbindN1Texture();
+	unbindC1Texture();
+	unbindN2Texture();
+	unbindC2Texture();
 
 	return 1000*elapsedTime/maxIt;
 }

@@ -21,5 +21,22 @@ extern "C" void step (
 		uint blocks,
 		uint threads,
 		double dt,
-		uint smem_size
+		uint smem_size,
+		bool one
 		);
+
+extern "C" void bindN1Texture(FN_TYPE *cuArray, cudaChannelFormatDesc channelDesc, size_t size);
+
+extern "C" void bindC1Texture(FN_TYPE *cuArray, cudaChannelFormatDesc channelDesc, size_t size);
+
+extern "C" void bindN2Texture(FN_TYPE *cuArray, cudaChannelFormatDesc channelDesc, size_t size);
+
+extern "C" void bindC2Texture(FN_TYPE *cuArray, cudaChannelFormatDesc channelDesc, size_t size);
+
+extern "C" void unbindN1Texture();
+
+extern "C" void unbindC1Texture();
+
+extern "C" void unbindN2Texture();
+
+extern "C" void unbindC2Texture();
