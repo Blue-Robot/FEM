@@ -24,10 +24,10 @@ __global__ void stepKernel(FN_TYPE *nFn_src, FN_TYPE *cFn_src, FN_TYPE *nFn_dst,
 	__syncthreads();
 
 	/* face gradients *************************************/
-	if (threadIdx.x >= block_face_count[blockIdx.x])
-		return;
-
-	int fn_index[3] = {fv[blockIdx.x*3*fv_pitch + threadIdx.x], fv[blockIdx.x*3*fv_pitch + fv_pitch + threadIdx.x], fv[blockIdx.x*3*fv_pitch + 2*fv_pitch + threadIdx.x]};
+	for (int i = threadIdx.x; i < 3*blockDim.x; i+= blockDim.x) {
+		if (i >= block_face_count[blockIdx.x])
+			break;
+	int fn_index[3] = {fv[blockIdx.x*3*fv_pitch + i], fv[blockIdx.x*3*fv_pitch + fv_pitch + i], fv[blockIdx.x*3*fv_pitch + 2*fv_pitch + i]};
 
 	FN_TYPE nv1 = nFn_src[fn_index[2]];
 	FN_TYPE nv12 = nFn_src[fn_index[0]] - nv1;
@@ -40,23 +40,24 @@ __global__ void stepKernel(FN_TYPE *nFn_src, FN_TYPE *cFn_src, FN_TYPE *nFn_dst,
 	fn_index[1] -= vertex_parts[blockIdx.x];
 	fn_index[2] -= vertex_parts[blockIdx.x];
 
-	float3 grad12 = make_float3(grads[blockIdx.x*2*he_pitch + threadIdx.x]);
-	float3 grad13 = make_float3(grads[blockIdx.x*2*he_pitch + he_pitch + threadIdx.x]);
+	float3 grad12 = make_float3(grads[blockIdx.x*2*he_pitch + i]);
+	float3 grad13 = make_float3(grads[blockIdx.x*2*he_pitch + he_pitch + i]);
 
 	for (int j = 0; j < 3; j++) {
 		if (fn_index[j] >= 0 && fn_index[j] < size) {
-			float3 nvGrad = (grad12 * nv12 + grad13 * nv13)*fv_weights[blockIdx.x*3*fv_pitch + j*fv_pitch + threadIdx.x];
+			float3 nvGrad = (grad12 * nv12 + grad13 * nv13)*fv_weights[blockIdx.x*3*fv_pitch + j*fv_pitch + i];
 			atomicAdd(&s_nvGrads[fn_index[j]].x, nvGrad.x);
 			atomicAdd(&s_nvGrads[fn_index[j]].y, nvGrad.y);
 			atomicAdd(&s_nvGrads[fn_index[j]].z, nvGrad.z);
 
-			float3 cvGrad = (grad12 * cv12 + grad13 * cv13)*fv_weights[blockIdx.x*3*fv_pitch + j*fv_pitch + threadIdx.x];
+			float3 cvGrad = (grad12 * cv12 + grad13 * cv13)*fv_weights[blockIdx.x*3*fv_pitch + j*fv_pitch + i];
 			atomicAdd(&s_cvGrads[fn_index[j]].x, cvGrad.x);
 			atomicAdd(&s_cvGrads[fn_index[j]].y, cvGrad.y);
 			atomicAdd(&s_cvGrads[fn_index[j]].z, cvGrad.z);
 
-			atomicAdd(&s_wg[fn_index[j]], fv_weights[blockIdx.x*3*fv_pitch + j*fv_pitch + threadIdx.x]);
+			atomicAdd(&s_wg[fn_index[j]], fv_weights[blockIdx.x*3*fv_pitch + j*fv_pitch + i]);
 		}
+	}
 	}
 
 	__syncthreads();
