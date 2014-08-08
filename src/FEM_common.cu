@@ -8,18 +8,16 @@ const FN_TYPE r = 1.52;
 const FN_TYPE alpha = 12.02;
 const FN_TYPE S = 1;
 
-extern __shared__ FN_TYPE s_mem[];
 __global__ void stepKernel(FN_TYPE *nFn_src, FN_TYPE *cFn_src, FN_TYPE *nFn_dst,
-		FN_TYPE *cFn_dst, uint *fv, FN_TYPE *fv_weights, uint fv_pitch,
-		uint *nbr, FN_TYPE *vtxW, uint vw_pitch, FN_TYPE *vertex_weights, uint vv_pitch, uint vv_size, float4 *grads, uint he_pitch, uint *vertex_parts, uint *block_face_count, double dt) {
+		FN_TYPE *cFn_dst, float4 *nv_grads, float4 *cv_grads, FN_TYPE *wg, uint *fv, FN_TYPE *fv_weights, uint fv_pitch,
+		uint *nbr, FN_TYPE *vtxW, uint vw_pitch, FN_TYPE *vertex_weights,
+		uint vv_pitch, uint vv_size, float4 *grads, uint he_pitch,
+		uint *vertex_parts, uint *block_face_count, double dt) {
 
-	uint size = vertex_parts[blockIdx.x+1] - vertex_parts[blockIdx.x];
-	float3 *s_nvGrads = (float3 *)&s_mem[0];
-	float3 *s_cvGrads = &s_nvGrads[size];
-	FN_TYPE *s_wg = (FN_TYPE *)&s_cvGrads[size];
-	for (int i = threadIdx.x; i < 7*size; i += blockDim.x) {
-		s_mem[i] = 0.0;
-	}
+	int i = vertex_parts[blockIdx.x] + threadIdx.x;
+	nv_grads[i] = make_float4(0.0, 0.0, 0.0, 0.0);
+	cv_grads[i] = make_float4(0.0, 0.0, 0.0, 0.0);
+	wg[i] = 0.0;
 
 	__syncthreads();
 
@@ -36,33 +34,31 @@ __global__ void stepKernel(FN_TYPE *nFn_src, FN_TYPE *cFn_src, FN_TYPE *nFn_dst,
 	FN_TYPE cv12 = cFn_src[fn_index[0]] - cv1;
 	FN_TYPE cv13 = cFn_src[fn_index[1]] - cv1;
 
-	fn_index[0] -= vertex_parts[blockIdx.x];
-	fn_index[1] -= vertex_parts[blockIdx.x];
-	fn_index[2] -= vertex_parts[blockIdx.x];
 
 	float3 grad12 = make_float3(grads[blockIdx.x*2*he_pitch + threadIdx.x]);
 	float3 grad13 = make_float3(grads[blockIdx.x*2*he_pitch + he_pitch + threadIdx.x]);
 
+
+
 	for (int j = 0; j < 3; j++) {
-		if (fn_index[j] >= 0 && fn_index[j] < size) {
+		if(fn_index[j] >= vertex_parts[blockIdx.x] && fn_index[j] < vertex_parts[blockIdx.x+1]) {
 			float3 nvGrad = (grad12 * nv12 + grad13 * nv13)*fv_weights[blockIdx.x*3*fv_pitch + j*fv_pitch + threadIdx.x];
-			atomicAdd(&s_nvGrads[fn_index[j]].x, nvGrad.x);
-			atomicAdd(&s_nvGrads[fn_index[j]].y, nvGrad.y);
-			atomicAdd(&s_nvGrads[fn_index[j]].z, nvGrad.z);
+			atomicAdd(&nv_grads[fn_index[j]].x, nvGrad.x);
+			atomicAdd(&nv_grads[fn_index[j]].y, nvGrad.y);
+			atomicAdd(&nv_grads[fn_index[j]].z, nvGrad.z);
 
 			float3 cvGrad = (grad12 * cv12 + grad13 * cv13)*fv_weights[blockIdx.x*3*fv_pitch + j*fv_pitch + threadIdx.x];
-			atomicAdd(&s_cvGrads[fn_index[j]].x, cvGrad.x);
-			atomicAdd(&s_cvGrads[fn_index[j]].y, cvGrad.y);
-			atomicAdd(&s_cvGrads[fn_index[j]].z, cvGrad.z);
+			atomicAdd(&cv_grads[fn_index[j]].x, cvGrad.x);
+			atomicAdd(&cv_grads[fn_index[j]].y, cvGrad.y);
+			atomicAdd(&cv_grads[fn_index[j]].z, cvGrad.z);
 
-			atomicAdd(&s_wg[fn_index[j]], fv_weights[blockIdx.x*3*fv_pitch + j*fv_pitch + threadIdx.x]);
+			atomicAdd(&wg[fn_index[j]], fv_weights[blockIdx.x*3*fv_pitch + j*fv_pitch + threadIdx.x]);
 		}
 	}
 
 	__syncthreads();
 
 	// Adjust i
-	int i = vertex_parts[blockIdx.x] + threadIdx.x;
 
 	// Kill unnecessary threads
 	if (i >= vertex_parts[blockIdx.x + 1])
@@ -70,8 +66,8 @@ __global__ void stepKernel(FN_TYPE *nFn_src, FN_TYPE *cFn_src, FN_TYPE *nFn_dst,
 
 	/* vertex gradients ***********************************/
 
-	FN_TYPE dotP = dot(s_nvGrads[threadIdx.x] / s_wg[threadIdx.x], s_cvGrads[threadIdx.x] / s_wg[threadIdx.x]);
-	if (s_wg[threadIdx.x] <= 0)
+	FN_TYPE dotP = dot(make_float3(nv_grads[i]) / wg[i], make_float3(cv_grads[i]) / wg[i]);
+	if (wg[i] <= 0)
 		dotP = 0;
 
 	/* laplacian ******************************************/
@@ -97,8 +93,8 @@ __global__ void stepKernel(FN_TYPE *nFn_src, FN_TYPE *cFn_src, FN_TYPE *nFn_dst,
 	cFn_dst[i] = dt * dauC + cFn_src[i];
 }
 
-extern "C" void step(FN_TYPE *nFn_src, FN_TYPE *cFn_src, FN_TYPE *nFn_dst,
-		FN_TYPE *cFn_dst, uint *fv, FN_TYPE *fv_weights, uint fv_pitchInBytes,
+extern "C" void step(FN_TYPE *nFn_src, FN_TYPE *cFn_src, FN_TYPE *nFn_dst, FN_TYPE *cFn_dst, float4 *nv_grads, float4 *cv_grads, FN_TYPE *wg,
+		uint *fv, FN_TYPE *fv_weights, uint fv_pitchInBytes,
 		uint *nbr, FN_TYPE *vtxW, uint vw_pitchInBytes, FN_TYPE *vertex_weights, uint vv_pitchInBytes, uint vv_size, float4 *grads, uint he_pitchInBytes,
 		uint *parts_n, uint *block_face_count,
 		uint blocks, uint threads, double dt, uint smem_size) {
@@ -106,7 +102,7 @@ extern "C" void step(FN_TYPE *nFn_src, FN_TYPE *cFn_src, FN_TYPE *nFn_dst,
 	dim3 block(threads, 1, 1);
 	dim3 grid(blocks, 1, 1);
 
-	stepKernel<<<grid, block, smem_size>>>(nFn_src, cFn_src, nFn_dst, cFn_dst,
+	stepKernel<<<grid, block>>>(nFn_src, cFn_src, nFn_dst, cFn_dst, nv_grads, cv_grads, wg,
 			fv, fv_weights, fv_pitchInBytes/sizeof(uint), nbr, vtxW, vw_pitchInBytes/sizeof(uint), vertex_weights, vv_pitchInBytes/sizeof(uint), vv_size, grads, he_pitchInBytes/sizeof(float4), parts_n, block_face_count, dt);
 
 }
