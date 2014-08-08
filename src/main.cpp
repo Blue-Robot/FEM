@@ -103,8 +103,8 @@ uint max_face_count;
 uint *block_face_count;
 
 //batch configuration
-int start_n = 39; // number of partitions to start with
-int end_n = 39; // number of partitions to end with
+int start_n = 227; // number of partitions to start with
+int end_n = 227; // number of partitions to end with
 
 using namespace OpenMesh;
 
@@ -421,14 +421,14 @@ double GPUrun(int n) {
 		printf("ERROR: Too many nodes per Block! (%d %d)\n", n, max_size_n);
 		return -1.0;
 	}
-	if(max_size_e > 1024) {
-		printf("ERROR: Too many elements per Block! (%d %d)\n", n, max_size_e);
-		return -1.0;
-	}
+//	if(max_size_e > 1024) {
+//		printf("ERROR: Too many elements per Block! (%d %d)\n", n, max_size_e);
+//		return -1.0;
+//	}
 
 	int threads_n = ((max_size_n + 32 - 1) / 32) * 32;
 	int threads_e = ((max_size_e + 32 - 1) / 32) * 32;
-	int threads = std::max(threads_n, threads_e);
+	int threads = threads_n;
 	uint smem_size = max_size_n*7*4;
 	//end
 
