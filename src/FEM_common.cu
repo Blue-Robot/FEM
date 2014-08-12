@@ -43,23 +43,26 @@ __global__ void stepKernel(FN_TYPE *nFn_src, FN_TYPE *cFn_src, FN_TYPE *nFn_dst,
 	float3 grad12 = make_float3(grads[blockIdx.x*2*he_pitch + threadIdx.x]);
 	float3 grad13 = make_float3(grads[blockIdx.x*2*he_pitch + he_pitch + threadIdx.x]);
 
+	float3 nvGrad = grad12 * nv12 + grad13 * nv13;
+	float3 cvGrad = grad12 * cv12 + grad13 * cv13;
+
 	for (int j = 0; j < 3; j++) {
 		if (fn_index[j] >= 0 && fn_index[j] < size) {
-			float3 nvGrad = (grad12 * nv12 + grad13 * nv13)*fv_weights[blockIdx.x*3*fv_pitch + j*fv_pitch + threadIdx.x];
-			atomicAdd(&s_nvGrads[fn_index[j]].x, nvGrad.x);
-			atomicAdd(&s_nvGrads[fn_index[j]].y, nvGrad.y);
-			atomicAdd(&s_nvGrads[fn_index[j]].z, nvGrad.z);
+			FN_TYPE weight = fv_weights[blockIdx.x*3*fv_pitch + j*fv_pitch + threadIdx.x];
 
-			float3 cvGrad = (grad12 * cv12 + grad13 * cv13)*fv_weights[blockIdx.x*3*fv_pitch + j*fv_pitch + threadIdx.x];
-			atomicAdd(&s_cvGrads[fn_index[j]].x, cvGrad.x);
-			atomicAdd(&s_cvGrads[fn_index[j]].y, cvGrad.y);
-			atomicAdd(&s_cvGrads[fn_index[j]].z, cvGrad.z);
+			atomicAdd(&s_nvGrads[fn_index[j]].x, nvGrad.x*weight);
+			atomicAdd(&s_nvGrads[fn_index[j]].y, nvGrad.y*weight);
+			atomicAdd(&s_nvGrads[fn_index[j]].z, nvGrad.z*weight);
 
-			atomicAdd(&s_wg[fn_index[j]], fv_weights[blockIdx.x*3*fv_pitch + j*fv_pitch + threadIdx.x]);
+			atomicAdd(&s_cvGrads[fn_index[j]].x, cvGrad.x*weight);
+			atomicAdd(&s_cvGrads[fn_index[j]].y, cvGrad.y*weight);
+			atomicAdd(&s_cvGrads[fn_index[j]].z, cvGrad.z*weight);
+
+			atomicAdd(&s_wg[fn_index[j]], weight);
 		}
 	}
 
-	__syncthreads();
+
 
 	// Adjust i
 	int i = vertex_parts[blockIdx.x] + threadIdx.x;
@@ -67,12 +70,6 @@ __global__ void stepKernel(FN_TYPE *nFn_src, FN_TYPE *cFn_src, FN_TYPE *nFn_dst,
 	// Kill unnecessary threads
 	if (i >= vertex_parts[blockIdx.x + 1])
 		return;
-
-	/* vertex gradients ***********************************/
-
-	FN_TYPE dotP = dot(s_nvGrads[threadIdx.x] / s_wg[threadIdx.x], s_cvGrads[threadIdx.x] / s_wg[threadIdx.x]);
-	if (s_wg[threadIdx.x] <= 0)
-		dotP = 0;
 
 	/* laplacian ******************************************/
 	FN_TYPE vW = vtxW[blockIdx.x*vw_pitch + threadIdx.x];
@@ -87,6 +84,12 @@ __global__ void stepKernel(FN_TYPE *nFn_src, FN_TYPE *cFn_src, FN_TYPE *nFn_dst,
 		c += cFn_src[nIdx] * hW;
 	}
 
+	/* vertex gradients ***********************************/
+	__syncthreads();
+	FN_TYPE dotP = dot(s_nvGrads[threadIdx.x] / s_wg[threadIdx.x], s_cvGrads[threadIdx.x] / s_wg[threadIdx.x]);
+	if (s_wg[threadIdx.x] <= 0) {
+		dotP = 0;
+	}
 
 	/* update *********************************************/
 	FN_TYPE dauN = D * n - alpha * nFn_src[i] * c - alpha * dotP

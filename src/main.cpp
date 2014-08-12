@@ -183,7 +183,7 @@ void initializeCUDA() {
 	checkCudaErrors(cudaSetDevice(gpuGetMaxGflopsDeviceId()));
 
 	//checkCudaErrors(cudaDeviceSetSharedMemConfig(cudaSharedMemBankSizeFourByte));
-	//checkCudaErrors(cudaDeviceSetCacheConfig(cudaFuncCachePreferShared));
+	checkCudaErrors(cudaDeviceSetCacheConfig(cudaFuncCachePreferShared));
 }
 
 void initializeGPUData(int n) {
