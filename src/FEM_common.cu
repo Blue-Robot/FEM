@@ -46,21 +46,45 @@ __global__ void stepKernel(FN_TYPE *nFn_src, FN_TYPE *cFn_src, FN_TYPE *nFn_dst,
 	float3 nvGrad = grad12 * nv12 + grad13 * nv13;
 	float3 cvGrad = grad12 * cv12 + grad13 * cv13;
 
-	for (int j = 0; j < 3; j++) {
-		if (fn_index[j] >= 0 && fn_index[j] < size) {
-			FN_TYPE weight = fv_weights[blockIdx.x*3*fv_pitch + j*fv_pitch + threadIdx.x];
 
-			atomicAdd(&s_nvGrads[fn_index[j]].x, nvGrad.x*weight);
-			atomicAdd(&s_nvGrads[fn_index[j]].y, nvGrad.y*weight);
-			atomicAdd(&s_nvGrads[fn_index[j]].z, nvGrad.z*weight);
+	FN_TYPE weight = fv_weights[blockIdx.x*3*fv_pitch + threadIdx.x];
 
-			atomicAdd(&s_cvGrads[fn_index[j]].x, cvGrad.x*weight);
-			atomicAdd(&s_cvGrads[fn_index[j]].y, cvGrad.y*weight);
-			atomicAdd(&s_cvGrads[fn_index[j]].z, cvGrad.z*weight);
-
-			atomicAdd(&s_wg[fn_index[j]], weight);
-		}
+	for (int i = 0; i < 3; i++) {
+		atomicAdd(&s_nvGrads[fn_index[0]].x+i, *(&nvGrad.x+i)*weight);
+		atomicAdd(&s_cvGrads[fn_index[0]].x+i, *(&cvGrad.x+i)*weight);
 	}
+	atomicAdd(&s_wg[fn_index[0]], weight);
+
+
+	if (fn_index[1] < 0 || fn_index[1] >= size)
+		return;
+
+	weight = fv_weights[blockIdx.x*3*fv_pitch + fv_pitch + threadIdx.x];
+
+	atomicAdd(&s_nvGrads[fn_index[1]].x+0, *(&nvGrad.x+0)*weight);
+	atomicAdd(&s_nvGrads[fn_index[1]].x+1, *(&nvGrad.x+1)*weight);
+	atomicAdd(&s_nvGrads[fn_index[1]].x+2, *(&nvGrad.x+2)*weight);
+
+	atomicAdd(&s_cvGrads[fn_index[1]].x+0, *(&cvGrad.x+0)*weight);
+	atomicAdd(&s_cvGrads[fn_index[1]].x+1, *(&cvGrad.x+1)*weight);
+	atomicAdd(&s_cvGrads[fn_index[1]].x+2, *(&cvGrad.x+2)*weight);
+
+	atomicAdd(&s_wg[fn_index[1]], weight);
+
+	if (fn_index[2] < 0 || fn_index[2] >= size)
+		return;
+
+	weight = fv_weights[blockIdx.x*3*fv_pitch + 2*fv_pitch + threadIdx.x];
+
+	atomicAdd(&s_nvGrads[fn_index[2]].x+0, *(&nvGrad.x+0)*weight);
+	atomicAdd(&s_nvGrads[fn_index[2]].x+1, *(&nvGrad.x+1)*weight);
+	atomicAdd(&s_nvGrads[fn_index[2]].x+2, *(&nvGrad.x+2)*weight);
+
+	atomicAdd(&s_cvGrads[fn_index[2]].x+0, *(&cvGrad.x+0)*weight);
+	atomicAdd(&s_cvGrads[fn_index[2]].x+1, *(&cvGrad.x+1)*weight);
+	atomicAdd(&s_cvGrads[fn_index[2]].x+2, *(&cvGrad.x+2)*weight);
+
+	atomicAdd(&s_wg[fn_index[2]], weight);
 
 
 

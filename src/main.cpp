@@ -33,6 +33,7 @@
 #include <helper_functions.h>
 #include <helper_cuda.h>
 #include <helper_cuda_gl.h>
+#include "helper_math.h"
 #include <rendercheck_gl.h>
 #include <cuda_profiler_api.h>
 
@@ -380,27 +381,171 @@ void initializeGPUData(int n) {
 			}
 		}
 
+		// Loop through halo faces with only one halo vertex
+		int halo_idx = 0;
 		for (int j = 0; j < halo_faces_keys[i+1] - halo_faces_keys[i]; j++) {
 			FaceHandle f = orderedMesh.face_handle(halo_faces[j+halo_faces_keys[i]]);
 
-			// halfedge weights
-			OpenMesh::Vec3f vec12 = mStats.gradVec12[f.idx()];
-			he_grads[i*2*max_face_count + j + element_parts[i+1] - element_parts[i]] = make_float4(vec12.values_[0], vec12.values_[1], vec12.values_[2], 0.0);
-
-			OpenMesh::Vec3f vec13 = mStats.gradVec13[f.idx()];
-			he_grads[i*2*max_face_count + max_face_count + j + element_parts[i+1] - element_parts[i]] = make_float4(vec13.values_[0], vec13.values_[1], vec13.values_[2], 0.0);
-
-			// face vertices indices and weights
-			int counter = 0;
+			int halo_vertex_counter = 0;
 			for (SimpleTriMesh::FaceHalfedgeIter fhIter = orderedMesh.fh_begin(f); fhIter != orderedMesh.fh_end(f); ++fhIter) {
 				VertexHandle v = orderedMesh.to_vertex_handle(fhIter.handle());
-				face_vertices[i*3*max_face_count + counter*max_face_count + j + element_parts[i+1] - element_parts[i]] = v.idx();
-				fv_weights_new[i*3*max_face_count + counter*max_face_count + j + element_parts[i+1] - element_parts[i]] = mStats.meshAngle[fhIter.handle().idx()];
-				counter++;
+				if (v.idx() < node_parts[i] || v.idx() >= node_parts[i+1])
+					halo_vertex_counter++;
+			}
+
+			if (halo_vertex_counter == 1) {
+				float4 vecs[2];
+				uint vertices[3];
+				FN_TYPE weights[3];
+
+				// halfedge weights (preparation)
+				OpenMesh::Vec3f vec12 = mStats.gradVec12[f.idx()];
+				vecs[0] = make_float4(vec12.values_[0], vec12.values_[1], vec12.values_[2], 0.0);
+
+				OpenMesh::Vec3f vec13 = mStats.gradVec13[f.idx()];
+				vecs[1] = make_float4(vec13.values_[0], vec13.values_[1], vec13.values_[2], 0.0);
+
+				// face vertices indices and weights (preparation)
+				int counter = 0;
+				for (SimpleTriMesh::FaceHalfedgeIter fhIter = orderedMesh.fh_begin(f); fhIter != orderedMesh.fh_end(f); ++fhIter) {
+					VertexHandle v = orderedMesh.to_vertex_handle(fhIter.handle());
+					vertices[counter] = v.idx();
+					weights[counter] = mStats.meshAngle[fhIter.handle().idx()];
+					counter++;
+				}
+
+
+				// swap halo to last position
+				uint idx = vertices[0];
+				FN_TYPE weight = weights[0];
+				float4 vec = make_float4(vecs[0].x, vecs[0].y, vecs[0].z, vecs[0].w);
+
+				if (idx < node_parts[i] || idx >= node_parts[i+1]) {
+					vertices[0] = vertices[1];
+					weights[0] = weights[1];
+
+					vertices[1] = vertices[2];
+					weights[1] = weights[2];
+
+					vertices[2] = idx;
+					weights[2] = weight;
+
+					vecs[0] = vecs[1];
+					vecs[1] = -vec - vecs[1];
+				}
+
+				idx = vertices[1];
+				weight = weights[1];
+				vec = make_float4(vecs[1].x, vecs[1].y, vecs[1].z, vecs[1].w);
+
+				if (idx < node_parts[i] || idx >= node_parts[i+1]) {
+					vertices[1] = vertices[0];
+					weights[1] = weights[0];
+
+					vertices[0] = vertices[2];
+					weights[0] = weights[2];
+
+					vertices[2] = idx;
+					weights[2] = weight;
+
+					vecs[1] = vecs[0];
+					vecs[0] = -vec - vecs[0];
+				}
+
+				// halfedge weights (save)
+				he_grads[i*2*max_face_count + halo_idx + element_parts[i+1] - element_parts[i]] = vecs[0];
+				he_grads[i*2*max_face_count + max_face_count + halo_idx + element_parts[i+1] - element_parts[i]] = vecs[1];
+
+				// face vertices indices and weights (save)
+				for (counter = 0; counter < 3; counter++) {
+					face_vertices[i*3*max_face_count + counter*max_face_count + halo_idx + element_parts[i+1] - element_parts[i]] = vertices[counter];
+					fv_weights_new[i*3*max_face_count + counter*max_face_count + halo_idx + element_parts[i+1] - element_parts[i]] = weights[counter];
+				}
+				halo_idx++;
 			}
 		}
 
+		// Loop through halo faces with two halo vertices
+		for (int j = 0; j < halo_faces_keys[i+1] - halo_faces_keys[i]; j++) {
+			FaceHandle f = orderedMesh.face_handle(halo_faces[j+halo_faces_keys[i]]);
 
+			int halo_vertex_counter = 0;
+			for (SimpleTriMesh::FaceHalfedgeIter fhIter = orderedMesh.fh_begin(f); fhIter != orderedMesh.fh_end(f); ++fhIter) {
+				VertexHandle v = orderedMesh.to_vertex_handle(fhIter.handle());
+				if (v.idx() < node_parts[i] || v.idx() >= node_parts[i+1])
+					halo_vertex_counter++;
+			}
+
+			if (halo_vertex_counter == 2) {
+				float4 vecs[2];
+				uint vertices[3];
+				FN_TYPE weights[3];
+
+				// halfedge weights (preparation)
+				OpenMesh::Vec3f vec12 = mStats.gradVec12[f.idx()];
+				vecs[0] = make_float4(vec12.values_[0], vec12.values_[1], vec12.values_[2], 0.0);
+
+				OpenMesh::Vec3f vec13 = mStats.gradVec13[f.idx()];
+				vecs[1] = make_float4(vec13.values_[0], vec13.values_[1], vec13.values_[2], 0.0);
+
+				// face vertices indices and weights (preparation)
+				int counter = 0;
+				for (SimpleTriMesh::FaceHalfedgeIter fhIter = orderedMesh.fh_begin(f); fhIter != orderedMesh.fh_end(f); ++fhIter) {
+					VertexHandle v = orderedMesh.to_vertex_handle(fhIter.handle());
+					vertices[counter] = v.idx();
+					weights[counter] = mStats.meshAngle[fhIter.handle().idx()];
+					counter++;
+				}
+
+				// swap interior vertex to first position
+				uint idx = vertices[1];
+				FN_TYPE weight = weights[1];
+				float4 vec = make_float4(vecs[0].x, vecs[0].y, vecs[0].z, vecs[0].w);
+
+				if (idx >= node_parts[i] && idx < node_parts[i+1]) {
+					vertices[1] = vertices[2];
+					weights[1] = weights[2];
+
+					vertices[2] = vertices[0];
+					weights[2] = weights[0];
+
+					vertices[0] = idx;
+					weights[0] = weight;
+
+					vecs[0] = vecs[1];
+					vecs[1] = -vec - vecs[1];
+				}
+
+				idx = vertices[2];
+				weight = weights[2];
+				vec = make_float4(vecs[1].x, vecs[1].y, vecs[1].z, vecs[1].w);
+
+				if (idx >= node_parts[i] && idx < node_parts[i+1]) {
+					vertices[2] = vertices[1];
+					weights[2] = weights[1];
+
+					vertices[1] = vertices[0];
+					weights[1] = weights[0];
+
+					vertices[0] = idx;
+					weights[0] = weight;
+
+					vecs[1] = vecs[0];
+					vecs[0] = -vec - vecs[0];
+				}
+
+				// halfedge weights (save)
+				he_grads[i*2*max_face_count + halo_idx + element_parts[i+1] - element_parts[i]] = vecs[0];
+				he_grads[i*2*max_face_count + max_face_count + halo_idx + element_parts[i+1] - element_parts[i]] = vecs[1];
+
+				// face vertices indices and weights (save)
+				for (counter = 0; counter < 3; counter++) {
+					face_vertices[i*3*max_face_count + counter*max_face_count + halo_idx + element_parts[i+1] - element_parts[i]] = vertices[counter];
+					fv_weights_new[i*3*max_face_count + counter*max_face_count + halo_idx + element_parts[i+1] - element_parts[i]] = weights[counter];
+				}
+				halo_idx++;
+			}
+		}
 	}
 }
 
