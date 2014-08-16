@@ -1,10 +1,8 @@
 #include "common.h"
 
 extern "C" void step (
-		FN_TYPE *nFn_src,
-		FN_TYPE *cFn_src,
-		FN_TYPE *nFn_dst,
-		FN_TYPE *cFn_dst,
+		float2 *fn_src,
+		float2 *fn_dst,
 		uint *fv,
 		FN_TYPE *fv_weights,
 		uint fv_pitchInBytes,
