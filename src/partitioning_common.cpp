@@ -100,6 +100,8 @@ int generatePartitions(SimpleTriMesh ipMesh, long int *npart, long int *epart, u
 	createOrderArray(node_parts, npart, numVtx, nparts);
 	createOrderArray(element_parts, epart, numFaces, nparts+1);
 
+	delete [] eptr;
+
 	return objval;
 }
 
@@ -133,6 +135,8 @@ void createOrderArray(uint *parts, long int *part, int numVtx, int n) {
 		parts[i] = i == 0 ? 0 : part_freq[i-1];
 
 	}
+	delete [] part_freq;
+	delete [] npart_tmp;
 }
 
 void reorderMesh(SimpleTriMesh *orderedMesh, long int *npart, long int *epart) {
@@ -158,6 +162,11 @@ void reorderMesh(SimpleTriMesh *orderedMesh, long int *npart, long int *epart) {
 
 		(*orderedMesh).add_face(v1, v2, v3);
 	}
+
+	delete [] npart_inv;
+	delete [] epart_inv;
+	delete [] npart;
+	delete [] epart;
 }
 
 void invertArray(long int *part, long int *part_inv, int n) {
