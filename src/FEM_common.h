@@ -3,6 +3,9 @@
 extern "C" void step (
 		float2 *fn_src,
 		float2 *fn_dst,
+		uint *dev_halo_sizes,
+		uint *halo_vertices,
+		uint hv_pitchInBytes,
 		uint *fv,
 		FN_TYPE *fv_weights,
 		uint fv_pitchInBytes,
