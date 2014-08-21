@@ -492,7 +492,7 @@ double GPUrun(int n) {
 		sum_error_c += fabs(fn[i].y-test_cFn[i]);
 		if (fabs(fn[i].x-test_nFn[i]) > 0 || fabs(fn[i].y-test_cFn[i]) > 0) {
 			error_counter++;
-			//printf("Error at %d: Should be %f but is %f!\n", i, test_nFn[i], nFn[i]);
+			//printf("Error at %d: Should be %f but is %f!\n", i, test_nFn[i], fn[i].x);
 		}
 	}
 

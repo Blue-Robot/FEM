@@ -91,8 +91,8 @@ __global__ void stepKernel(float2 *fn_src, float2 *fn_dst,
 			+ S * r * fn_src[i].x * (nMax - fn_src[i].x);
 	FN_TYPE dauC = lap.y + S * (fn_src[i].x / (1 + fn_src[i].x) - fn_src[i].y);
 
-	fn_dst[i].x = dt * dauN + fn_src[i].x;
-	fn_dst[i].y = dt * dauC + fn_src[i].y;
+	fn_dst[i].x = dt * dauN + fn_src[i].x > 0 ? dt * dauN + fn_src[i].x : 0.0;
+	fn_dst[i].y = dt * dauC + fn_src[i].y > 0 ? dt * dauC + fn_src[i].y : 0.0;
 }
 
 extern "C" void step(float2 *fn_src, float2 *fn_dst,
