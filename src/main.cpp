@@ -43,6 +43,7 @@
 #include "mesh_function.h"
 #include "FEM_common.h"
 #include "partitioning_common.h"
+#include "visualisation.h"
 
 // Model
 const FN_TYPE nMax = 1;
@@ -91,6 +92,9 @@ uint *block_face_count;
 
 float2 *fn;
 
+bool visual = true;
+int display_step = 100;
+
 //batch configuration
 int start_n = 26; // number of partitions to start with
 int end_n = 26; // number of partitions to end with
@@ -116,16 +120,27 @@ int main(int argc, char **argv) {
 	if (!verbose)
 		std::cout.rdbuf(NULL);
 
-	initializeCUDA();
 	loadMesh();
+
+	if(visual && !initialize(&argc, argv, numVtx, numFaces))
+		printf("SOmethink wong!\n");
+
+	initializeCUDA();
+
 
 	double best_time;
 	int best_n=-1;
 	for (int i = start_n; i <= end_n; i++) {
 		initializeData(i);
 		initializeGPUData(i);
+		if (visual)
+			initiateVBOData(orderedMesh);
 
 		double time = GPUrun(i);
+
+		if (visual)
+			return 0;
+
 		if ((best_n == -1 || best_time > time) && time > 0) {
 			best_n = i;
 			best_time = time;
@@ -138,57 +153,21 @@ int main(int argc, char **argv) {
 	return 0;
 }
 
-void process_mem_usage(double& vm_usage, double& resident_set)
-{
-   using std::ios_base;
-   using std::ifstream;
-   using std::string;
-
-   vm_usage     = 0.0;
-   resident_set = 0.0;
-
-   // 'file' stat seems to give the most reliable results
-   //
-   ifstream stat_stream("/proc/self/stat",ios_base::in);
-
-   // dummy vars for leading entries in stat that we don't care about
-   //
-   string pid, comm, state, ppid, pgrp, session, tty_nr;
-   string tpgid, flags, minflt, cminflt, majflt, cmajflt;
-   string utime, stime, cutime, cstime, priority, nice;
-   string O, itrealvalue, starttime;
-
-   // the two fields we want
-   //
-   unsigned long vsize;
-   long rss;
-
-   stat_stream >> pid >> comm >> state >> ppid >> pgrp >> session >> tty_nr
-               >> tpgid >> flags >> minflt >> cminflt >> majflt >> cmajflt
-               >> utime >> stime >> cutime >> cstime >> priority >> nice
-               >> O >> itrealvalue >> starttime >> vsize >> rss; // don't care about the rest
-
-   stat_stream.close();
-
-   long page_size_kb = sysconf(_SC_PAGE_SIZE) / 1024; // in case x86-64 is configured to use 2MB pages
-   vm_usage     = vsize / 1024.0;
-   resident_set = rss * page_size_kb;
-}
-
-
 void loadMesh() {
 	OpenMesh::IO::Options opt(OpenMesh::IO::Options::VertexColor | OpenMesh::IO::Options::VertexNormal);
 
 	originalMesh.request_vertex_normals();
 	OpenMesh::IO::read_mesh(originalMesh, file_name, opt);
+
+	numAngles = originalMesh.n_halfedges();
+	numVtx = originalMesh.n_vertices();
+	numFaces = originalMesh.n_faces();
+
+
 }
 
 void initializeData(int n) {
 	partition(originalMesh, &orderedMesh, &node_parts, &element_parts, n);
-
-	numAngles = orderedMesh.n_halfedges();
-	numVtx = orderedMesh.n_vertices();
-	numFaces = orderedMesh.n_faces();
 
 	initMeshStats(orderedMesh, mStats);
 
@@ -210,7 +189,8 @@ void initializeData(int n) {
 void initializeCUDA() {
 	checkCudaErrors(cudaDeviceSynchronize());
 	checkCudaErrors(cudaDeviceReset());
-	checkCudaErrors(cudaSetDevice(gpuGetMaxGflopsDeviceId()));
+
+	checkCudaErrors(cudaGLSetGLDevice(gpuGetMaxGflopsDeviceId()));
 
 	//checkCudaErrors(cudaDeviceSetSharedMemConfig(cudaSharedMemBankSizeFourByte));
 	checkCudaErrors(cudaDeviceSetCacheConfig(cudaFuncCachePreferShared));
@@ -462,6 +442,24 @@ double GPUrun(int n) {
 
 	checkCudaErrors(cudaMemcpy(dev_fn_one, fn, sizeof(float2)*numVtx, cudaMemcpyHostToDevice));
 	checkCudaErrors(cudaMemcpy(dev_parts_n, node_parts, sizeof(uint)*(n+1), cudaMemcpyHostToDevice));
+
+	if (visual) {
+		set_fn(dev_fn_one);
+		for (int i = 0; i < 1000000; i++) {
+
+			if (i%2 == 0) {
+				step(dev_fn_one, dev_fn_two, (uint *)dev_face_vertices.ptr, (FN_TYPE *)dev_fv_weights_new.ptr, dev_face_vertices.pitch, (uint *)dev_nbr_v.ptr, dev_vtxW, vw_pitchInBytes, (FN_TYPE *)dev_vertex_weights.ptr, dev_nbr_v.pitch, vv_max_neighbors, (float4 *)dev_he_grads.ptr, dev_he_grads.pitch, dev_parts_n, dev_block_face_count, n, threads, dt, smem_size);
+			} else {
+				step(dev_fn_two, dev_fn_one, (uint *)dev_face_vertices.ptr, (FN_TYPE *)dev_fv_weights_new.ptr, dev_face_vertices.pitch, (uint *)dev_nbr_v.ptr, dev_vtxW, vw_pitchInBytes, (FN_TYPE *)dev_vertex_weights.ptr, dev_nbr_v.pitch, vv_max_neighbors, (float4 *)dev_he_grads.ptr, dev_he_grads.pitch, dev_parts_n, dev_block_face_count, n, threads, dt, smem_size);
+			}
+
+			if(i%display_step == 0) {
+				cudaDeviceSynchronize();
+				glutMainLoopEvent();
+			}
+		}
+		return -1;
+	}
 
 
 	cudaProfilerStart();

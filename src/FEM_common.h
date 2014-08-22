@@ -21,3 +21,9 @@ extern "C" void step (
 		double dt,
 		uint smem_size
 		);
+
+extern "C" void format (
+		float2 *fn,
+		cudaGraphicsResource_t *vbo_res,
+		int vertices
+		);

@@ -2,6 +2,10 @@
 #include <stdio.h>
 #include "helper_math.h"
 
+// THRUST
+#include <thrust/extrema.h>
+#include <thrust/device_ptr.h>
+
 const FN_TYPE nMax = 1;
 const FN_TYPE D = 0.25;
 const FN_TYPE r = 1.52;
@@ -107,4 +111,43 @@ extern "C" void step(float2 *fn_src, float2 *fn_dst,
 	stepKernel<<<grid, block, smem_size>>>(fn_src, fn_dst,
 			fv, fv_weights, fv_pitchInBytes/sizeof(uint), nbr, vtxW, vw_pitchInBytes/sizeof(uint), vertex_weights, vv_pitchInBytes/sizeof(uint), vv_size, grads, he_pitchInBytes/sizeof(float4), parts_n, block_face_count, dt);
 
+}
+
+__global__ void formatKernel(float2 *fn, float4 *vbo, float2 *min, float2 *max, int offset) {
+	int i = blockIdx.x*blockDim.x + threadIdx.x;
+
+	float n = (fn[i].x-(*min).x)/((*max).x-(*min).x);
+	float c = 1 - n;
+	float b = c;
+
+	vbo[i + offset] = make_float4(n, c, b, 1.0);
+}
+
+struct comp_x
+{
+  __host__ __device__
+  bool operator()(float2 lhs, float2 rhs)
+  {
+    return lhs.x < rhs.x;
+  }
+};
+
+
+extern "C" void format (float2 *fn, cudaGraphicsResource_t *vbo_res, int vertices) {
+	thrust::device_ptr<float2> dptr(fn);
+	thrust::device_ptr<float2> dresptrmax = thrust::max_element(dptr, dptr + vertices, comp_x());
+	thrust::device_ptr<float2> dresptrmin = thrust::min_element(dptr, dptr + vertices, comp_x());
+
+	float2 *max = raw_pointer_cast(dresptrmax);
+	float2 *min = raw_pointer_cast(dresptrmin);
+
+	float4 *vboptr;
+	size_t num_bytes;
+
+	cudaGraphicsMapResources(1, vbo_res, 0);
+	cudaGraphicsResourceGetMappedPointer((void **)&vboptr, &num_bytes, *vbo_res);
+
+	formatKernel<<<vertices,1>>>(fn, vboptr, min, max, vertices);
+
+	cudaGraphicsUnmapResources(1, vbo_res, 0);
 }
