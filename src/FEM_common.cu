@@ -8,8 +8,8 @@
 
 const FN_TYPE nMax = 1;
 const FN_TYPE D = 0.25;
-const FN_TYPE r = 1.52;
-const FN_TYPE alpha = 12.02;
+const FN_TYPE r = 1.52201704740629;
+const FN_TYPE alpha = 12.0228703901698;
 const FN_TYPE S = 1;
 
 extern __shared__ FN_TYPE s_mem[];
@@ -73,27 +73,27 @@ __global__ void stepKernel(float2 *fn_src, float2 *fn_dst,
 		return;
 
 	/* laplacian ******************************************/
-	FN_TYPE vW = vtxW[blockIdx.x*vw_pitch + threadIdx.x];
+	double vW = vtxW[blockIdx.x*vw_pitch + threadIdx.x];
 	float2 lap = fn_src[i] * vW;
 
 	int end = nbr[blockIdx.x*(vv_size+1)*vv_pitch+threadIdx.x];
 	for (int j = 0; j < end; j++) {
 		int nIdx = nbr[blockIdx.x*(vv_size+1)*vv_pitch+vv_pitch*(j+1) + threadIdx.x];
-		FN_TYPE hW = vertex_weights[blockIdx.x*vv_size*vv_pitch+vv_pitch*j + threadIdx.x];
+		double hW = vertex_weights[blockIdx.x*vv_size*vv_pitch+vv_pitch*j + threadIdx.x];
 		lap += fn_src[nIdx] * hW;
 	}
 
 	/* vertex gradients ***********************************/
 	__syncthreads();
-	FN_TYPE dotP = dot(s_nvGrads[threadIdx.x] / s_wg[threadIdx.x], s_cvGrads[threadIdx.x] / s_wg[threadIdx.x]);
+	double dotP = dot(s_nvGrads[threadIdx.x] / s_wg[threadIdx.x], s_cvGrads[threadIdx.x] / s_wg[threadIdx.x]);
 	if (s_wg[threadIdx.x] <= 0) {
 		dotP = 0;
 	}
 
 	/* update *********************************************/
-	FN_TYPE dauN = D * lap.x - alpha * fn_src[i].x * lap.y - alpha * dotP
+	double dauN = D * lap.x - alpha * fn_src[i].x * lap.y - alpha * dotP
 			+ S * r * fn_src[i].x * (nMax - fn_src[i].x);
-	FN_TYPE dauC = lap.y + S * (fn_src[i].x / (1 + fn_src[i].x) - fn_src[i].y);
+	double dauC = lap.y + S * (fn_src[i].x / (1 + fn_src[i].x) - fn_src[i].y);
 
 	fn_dst[i].x = dt * dauN + fn_src[i].x > 0 ? dt * dauN + fn_src[i].x : 0.0;
 	fn_dst[i].y = dt * dauC + fn_src[i].y > 0 ? dt * dauC + fn_src[i].y : 0.0;
@@ -112,15 +112,20 @@ extern "C" void step(float2 *fn_src, float2 *fn_dst,
 			fv, fv_weights, fv_pitchInBytes/sizeof(uint), nbr, vtxW, vw_pitchInBytes/sizeof(uint), vertex_weights, vv_pitchInBytes/sizeof(uint), vv_size, grads, he_pitchInBytes/sizeof(float4), parts_n, block_face_count, dt);
 
 }
+const float sigma = 0.2;
 
 __global__ void formatKernel(float2 *fn, float4 *vbo, float2 *min, float2 *max, int offset) {
 	int i = blockIdx.x*blockDim.x + threadIdx.x;
 
 	float n = (fn[i].x-(*min).x)/((*max).x-(*min).x);
-	float c = 1 - n;
-	float b = c;
+	n = ((1.0f/(1.0f + expf(-((n-0.5f)/sigma)))) - (1.0f/(1.0f + expf(-((0.0f-0.5f)/sigma)))))/((1.0f/(1.0f + expf(-((1.0f-0.5f)/sigma)))) - (1.0f/(1.0f + expf(-((0.0f-0.5f)/sigma)))));
+	//n = n < 0.5 ? pow(n,3.0f) : pow(n,1/3.0f);
+	float c = 1-n;
+	float b = 1-n;
 
 	vbo[i + offset] = make_float4(n, c, b, 1.0);
+//	if (i == 0)
+//		printf("%f %f\n", (*max).x, (*min).x);
 }
 
 struct comp_x
@@ -146,6 +151,13 @@ extern "C" void format (float2 *fn, cudaGraphicsResource_t *vbo_res, int vertice
 
 	cudaGraphicsMapResources(1, vbo_res, 0);
 	cudaGraphicsResourceGetMappedPointer((void **)&vboptr, &num_bytes, *vbo_res);
+
+//	float2 *test = new float2[vertices];
+//	cudaMemcpy(test, fn, vertices*sizeof(float2), cudaMemcpyDeviceToHost);
+//	for(int i = 0; i < vertices; i++) {
+//		printf("%f ", test[i].x);
+//	}
+//	printf("\n");
 
 	formatKernel<<<vertices,1>>>(fn, vboptr, min, max, vertices);
 

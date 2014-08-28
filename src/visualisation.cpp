@@ -2,6 +2,8 @@
 #include <GL/glew.h>
 #include <GL/freeglut.h>
 
+#include <FreeImage.h>
+
 
 // C/C++ Includes
 #include <stdio.h>
@@ -10,6 +12,8 @@
 #include <cstdio>
 #include <iostream>
 #include <fstream>
+#include <sstream>
+#include <iomanip>
 
 // CUDA runtime
 // CUDA utilities and system includes
@@ -32,6 +36,8 @@ int vertices;
 int faces;
 uint *faceVertices;
 float2 *d_fn;
+int frame_counter = 1;
+bool save = true;
 
 GLuint dataVbo;
 GLuint indexVbo;
@@ -73,8 +79,7 @@ extern "C" void display() {
 	glLoadIdentity();
 	glTranslatef(0.0, 0.0, translate_z);
 	glRotatef(rotate_x, 1.0, 0.0, 0.0);
-	glRotatef(rotate_y, 0.0, 1.0, 0.0);
-
+	glRotatef(rotate_y+45, 0.0, 1.0, 0.0);
 	// bind buffer
 	glBindBuffer(GL_ARRAY_BUFFER, dataVbo);
 
@@ -97,14 +102,32 @@ extern "C" void display() {
 	glDisableClientState(GL_NORMAL_ARRAY);
 
 	glutSwapBuffers();
+	if (save) {
+		int width = 1000;
+		int height = 1000;
+
+		std::stringstream ss;
+		ss << "/home/clood/cuda-workspace/FEM/Video/frame_" << std::setw(10) << std::setfill('0') << frame_counter << ".bmp";
+
+		BYTE* pixels = new BYTE[ 3 * width * height];
+
+		glReadPixels(0, 0, width, height, GL_BGR, GL_UNSIGNED_BYTE, pixels);
+
+		FIBITMAP* image = FreeImage_ConvertFromRawBits(pixels, width, height, 3 * width, 24, 0x0000FF, 0xFF0000, 0x00FF00, false);
+		FreeImage_Save(FIF_BMP, image, ss.str().c_str(), 0);
+
+		FreeImage_Unload(image);
+		delete [] pixels;
+	}
+	frame_counter++;
 }
 
 bool initGL(int *argc, char **argv) {
 	glutInit(argc, argv);
 	glutInitDisplayMode(GLUT_RGBA | GLUT_DOUBLE);
-	glutInitWindowSize(800, 600);
-	glutInitWindowPosition((glutGet(GLUT_SCREEN_WIDTH) - 800) / 2, (glutGet(GLUT_SCREEN_HEIGHT) - 600) / 2);
-	glutCreateWindow("blabla");
+	glutInitWindowSize(1000, 1000);
+	glutInitWindowPosition((glutGet(GLUT_SCREEN_WIDTH) - 1000) / 2, (glutGet(GLUT_SCREEN_HEIGHT) - 1000) / 2);
+	glutCreateWindow("FEM");
 	glutDisplayFunc(display);
 	glutKeyboardFunc(keyboard);
 	glutMouseFunc(mouse);
@@ -126,12 +149,12 @@ bool initGL(int *argc, char **argv) {
 	glEnable(GL_CULL_FACE);
 
 	// Setup our viewport and viewing modes
-	glViewport(0, 0, 800, 600);
+	glViewport(0, 0, 1000, 1000);
 
 	// projection
 	glMatrixMode(GL_PROJECTION);
 	glLoadIdentity();
-	gluPerspective(60.0, (GLfloat) 800 / (GLfloat) 600, 0.1, 10.0);
+	gluPerspective(60.0, (GLfloat) 1000 / (GLfloat) 1000, 0.1, 10.0);
 
 	SDK_CHECK_ERROR_GL();
 

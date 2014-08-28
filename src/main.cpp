@@ -91,13 +91,14 @@ uint max_face_count;
 uint *block_face_count;
 
 float2 *fn;
+float2 *last;
 
 bool visual = true;
-int display_step = 100;
+int display_step = 1;
 
 //batch configuration
-int start_n = 26; // number of partitions to start with
-int end_n = 26; // number of partitions to end with
+int start_n = 131; // number of partitions to start with
+int end_n = 131; // number of partitions to end with
 
 using namespace OpenMesh;
 
@@ -113,6 +114,7 @@ void CPUrun(FN_TYPE *test_nFn, FN_TYPE *test_cFn, int num_steps);
 
 
 int main(int argc, char **argv) {
+
 	file_name = argv[1];
 	if (argc >=3 && !strcmp(argv[2], "-d"))
 		debug = true;
@@ -126,7 +128,6 @@ int main(int argc, char **argv) {
 		printf("SOmethink wong!\n");
 
 	initializeCUDA();
-
 
 	double best_time;
 	int best_n=-1;
@@ -171,6 +172,10 @@ void initializeData(int n) {
 
 	initMeshStats(orderedMesh, mStats);
 
+//	unsigned int seed = 1409138576;
+//	srand (seed);
+//	printf("%d\n", seed);
+
 	nFn = new FN_TYPE[numVtx];
 	cFn = new FN_TYPE[numVtx];
 	FN_TYPE* beta = new FN_TYPE[numVtx];
@@ -181,7 +186,8 @@ void initializeData(int n) {
 		cFn[i] = 1 / (1 + nFn[i]);
 	}
 
-	dt = mStats.maxEdgeLen * mStats.maxEdgeLen * 0.1;
+	dt = (mStats.maxEdgeLen * mStats.maxEdgeLen * 0.0001);
+
 
 	delete [] beta;
 }
@@ -190,7 +196,10 @@ void initializeCUDA() {
 	checkCudaErrors(cudaDeviceSynchronize());
 	checkCudaErrors(cudaDeviceReset());
 
-	checkCudaErrors(cudaGLSetGLDevice(gpuGetMaxGflopsDeviceId()));
+	if (visual)
+		checkCudaErrors(cudaGLSetGLDevice(gpuGetMaxGflopsDeviceId()));
+	else
+		checkCudaErrors(cudaSetDevice(gpuGetMaxGflopsDeviceId()));
 
 	//checkCudaErrors(cudaDeviceSetSharedMemConfig(cudaSharedMemBankSizeFourByte));
 	checkCudaErrors(cudaDeviceSetCacheConfig(cudaFuncCachePreferShared));
@@ -443,9 +452,17 @@ double GPUrun(int n) {
 	checkCudaErrors(cudaMemcpy(dev_fn_one, fn, sizeof(float2)*numVtx, cudaMemcpyHostToDevice));
 	checkCudaErrors(cudaMemcpy(dev_parts_n, node_parts, sizeof(uint)*(n+1), cudaMemcpyHostToDevice));
 
+//	last = new float2[numVtx];
+//	checkCudaErrors(cudaMemcpy(last, dev_fn_one, sizeof(float2)*numVtx, cudaMemcpyDeviceToHost));
+
+//	FN_TYPE *testt_nFn = new FN_TYPE[numVtx];
+//	FN_TYPE *testt_cFn = new FN_TYPE[numVtx];
+//	CPUrun(testt_nFn, testt_cFn, 5000);
+//	return -1;
+
 	if (visual) {
 		set_fn(dev_fn_one);
-		for (int i = 0; i < 1000000; i++) {
+		for (int i = 0; i <= 54300; i++) {
 
 			if (i%2 == 0) {
 				step(dev_fn_one, dev_fn_two, (uint *)dev_face_vertices.ptr, (FN_TYPE *)dev_fv_weights_new.ptr, dev_face_vertices.pitch, (uint *)dev_nbr_v.ptr, dev_vtxW, vw_pitchInBytes, (FN_TYPE *)dev_vertex_weights.ptr, dev_nbr_v.pitch, vv_max_neighbors, (float4 *)dev_he_grads.ptr, dev_he_grads.pitch, dev_parts_n, dev_block_face_count, n, threads, dt, smem_size);
@@ -454,8 +471,46 @@ double GPUrun(int n) {
 			}
 
 			if(i%display_step == 0) {
-				cudaDeviceSynchronize();
-				glutMainLoopEvent();
+				// log scaled time line
+				bool chosen_frame = false;
+				double val = 1.04457397;
+				int frames_per_second = 25;
+				int length_in_seconds = 10;
+
+				int last = 0;
+				for (int k = 1; k <= frames_per_second*length_in_seconds; k++) {
+					int result = (int)floor(pow(val,k));
+					result = result > last ? result : last+1;
+					if (result == i) {
+						chosen_frame = true;
+					}
+					last = result;
+				}
+
+				if(chosen_frame) {
+					cudaDeviceSynchronize();
+					glutMainLoopEvent();
+					printf("%d\n", i);
+				}
+
+
+
+
+
+//				float2 *test = new float2[numVtx];
+//				checkCudaErrors(cudaMemcpy(test, dev_fn_two, sizeof(float2)*numVtx, cudaMemcpyDeviceToHost));
+//				double sum_change = 0;
+//				for (int j = 0; j < numVtx; j++) {
+//					sum_change += fabs(test[j].x-last[j].x);
+//				}
+//				printf("%d: %.20f\n", i, sum_change);
+//				for(int j = 0; j < numVtx; j++) {
+//					last[j] = test[j];
+//				}
+//				delete [] test;
+
+
+
 			}
 		}
 		return -1;
@@ -532,8 +587,9 @@ double GPUrun(int n) {
 	cudaEventRecord(start, 0);
 
 	for (int i = 0; i < maxIt; i++) {
-		step(dev_fn_one, dev_fn_two, (uint *)dev_face_vertices.ptr, (FN_TYPE *)dev_fv_weights_new.ptr, dev_face_vertices.pitch, (uint *)dev_nbr_v.ptr, dev_vtxW, vw_pitchInBytes, (FN_TYPE *)dev_vertex_weights.ptr, dev_nbr_v.pitch, vv_max_neighbors, (float4 *)dev_he_grads.ptr, dev_he_grads.pitch, dev_parts_n, dev_block_face_count, n, threads, dt, smem_size);
-		step(dev_fn_two, dev_fn_one, (uint *)dev_face_vertices.ptr, (FN_TYPE *)dev_fv_weights_new.ptr, dev_face_vertices.pitch, (uint *)dev_nbr_v.ptr, dev_vtxW, vw_pitchInBytes, (FN_TYPE *)dev_vertex_weights.ptr, dev_nbr_v.pitch, vv_max_neighbors, (float4 *)dev_he_grads.ptr, dev_he_grads.pitch, dev_parts_n, dev_block_face_count, n, threads, dt, smem_size);
+		CPUrun(test_nFn, test_cFn, 2);
+//		step(dev_fn_one, dev_fn_two, (uint *)dev_face_vertices.ptr, (FN_TYPE *)dev_fv_weights_new.ptr, dev_face_vertices.pitch, (uint *)dev_nbr_v.ptr, dev_vtxW, vw_pitchInBytes, (FN_TYPE *)dev_vertex_weights.ptr, dev_nbr_v.pitch, vv_max_neighbors, (float4 *)dev_he_grads.ptr, dev_he_grads.pitch, dev_parts_n, dev_block_face_count, n, threads, dt, smem_size);
+//		step(dev_fn_two, dev_fn_one, (uint *)dev_face_vertices.ptr, (FN_TYPE *)dev_fv_weights_new.ptr, dev_face_vertices.pitch, (uint *)dev_nbr_v.ptr, dev_vtxW, vw_pitchInBytes, (FN_TYPE *)dev_vertex_weights.ptr, dev_nbr_v.pitch, vv_max_neighbors, (float4 *)dev_he_grads.ptr, dev_he_grads.pitch, dev_parts_n, dev_block_face_count, n, threads, dt, smem_size);
 	}
 
 	cudaEventRecord(stop, 0);
@@ -620,26 +676,32 @@ void CPUrun(FN_TYPE *test_nFn, FN_TYPE *test_cFn, int num_steps) {
 		computeVertexGradientsCPU<OpenMesh::Vec3f>(orderedMesh, facGradC,
 				vtxGradC, mStats.meshAngle);
 
-		for (unsigned int i = 0; i < numVtx; ++i) {
-			dauN[i] = D * nLap[i] - alpha * test_nFn[i] * cLap[i]
-					- alpha * (vtxGradC[i] | vtxGradN[i])
-					+ S * r * test_nFn[i] * (nMax - test_nFn[i]);
-			dauC[i] = cLap[i]
-					+ S * (-test_cFn[i] + test_nFn[i] / (1 + test_nFn[i]));
+		for (unsigned int j = 0; j < numVtx; ++j) {
+			dauN[j] = D * nLap[j] - alpha * test_nFn[j] * cLap[j]
+					- alpha * (vtxGradC[j] | vtxGradN[j])
+					+ S * r * test_nFn[j] * (nMax - test_nFn[j]);
+			dauC[j] = cLap[j]
+					+ S * (-test_cFn[j] + test_nFn[j] / (1 + test_nFn[j]));
 		}
 
 		// update functions
-		for (unsigned int i = 0; i < numVtx; ++i) {
-			test_nFn[i] = test_nFn[i] + (dt * (dauN[i]));
-			test_cFn[i] = test_cFn[i] + (dt * dauC[i]);
+		for (unsigned int j = 0; j < numVtx; ++j) {
+			test_nFn[j] = test_nFn[j] + (dt * (dauN[j]));
+			test_cFn[j] = test_cFn[j] + (dt * dauC[j]);
 
-			if (test_nFn[i] < 0)
-				test_nFn[i] = 0;
+			if (test_nFn[j] < 0)
+				test_nFn[j] = 0;
 
-			if (test_cFn[i] < 0)
-				test_cFn[i] = 0;
+			if (test_cFn[j] < 0)
+				test_cFn[j] = 0;
 
 		}
+
+//		printf("%d: ", i);
+//		for (int j = 0; j < 10; j++) {
+//			printf("%f ", test_nFn[j]);
+//		}
+//		printf("\n");
 
 		delete [] nLap;
 		delete [] cLap;
