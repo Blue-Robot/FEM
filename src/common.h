@@ -1,7 +1,8 @@
 #ifndef _COMMON_DEFS_H_
 #define _COMMON_DEFS_H_
 
-#include <Mesh/TriMesh_ArrayKernelT.hh>
+//#include <Mesh/TriMesh_ArrayKernelT.hh>
+#include <OpenMesh/Core/Mesh/TriMesh_ArrayKernelT.hh>
 
 typedef double PDE_DOUBLE;
 typedef float  PDE_FLOAT;

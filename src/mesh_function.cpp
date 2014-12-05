@@ -97,7 +97,7 @@ void computeAngles(SimpleTriMesh &ipMesh, MeshStats &mStats)
     OpenMesh::VertexHandle v1,v2,v3,v4;
     OpenMesh::HalfedgeHandle hCurr, hNext, hNext2;
 
-    hCurr = heIter.handle();
+    hCurr = *heIter;
 
 
     if (ipMesh.is_boundary(hCurr)) {
@@ -180,7 +180,7 @@ void computeAreas(SimpleTriMesh &ipMesh, MeshStats &mStats)
     OpenMesh::FaceHandle fCurr;
     OpenMesh::HalfedgeHandle hCurr,hNext;
 
-    fCurr = fIter.handle();
+    fCurr = (*fIter);
     hCurr = ipMesh.halfedge_handle(fCurr);
     hNext = ipMesh.next_halfedge_handle(hCurr);
 
@@ -236,7 +236,7 @@ void computeLaplacianWeights(SimpleTriMesh &ipMesh, MeshStats &mStats)
     OpenMesh::HalfedgeHandle hCurr, hNext, hOpp, hOppNext;
 
 
-    hCurr = heIter.handle();
+    hCurr = (*heIter);
     hNext = ipMesh.next_halfedge_handle(hCurr);
 
     v1 = ipMesh.from_vertex_handle(hCurr);
@@ -288,7 +288,7 @@ void computeAverageEdgeLength(SimpleTriMesh &ipMesh, MeshStats &mStats)
     OpenMesh::HalfedgeHandle hCurr;
 
 
-    hCurr = heIter.handle();
+    hCurr = (*heIter);
 
     v1 = ipMesh.from_vertex_handle(hCurr);
     v2 = ipMesh.to_vertex_handle(hCurr);
@@ -326,7 +326,7 @@ void computeMaxEdgeLength(SimpleTriMesh &ipMesh, MeshStats &mStats)
     OpenMesh::HalfedgeHandle hCurr;
 
 
-    hCurr = heIter.handle();
+    hCurr = (*heIter);
 
     v1 = ipMesh.from_vertex_handle(hCurr);
     v2 = ipMesh.to_vertex_handle(hCurr);
@@ -368,7 +368,7 @@ void computeGradVectors(SimpleTriMesh &ipMesh, MeshStats &mStats)
     OpenMesh::FaceHandle fCurr;
     OpenMesh::HalfedgeHandle hCurr,hNext;
 
-    fCurr = fIter.handle();
+    fCurr = (*fIter);
     hCurr = ipMesh.halfedge_handle(fCurr);
     hNext = ipMesh.next_halfedge_handle(hCurr);
 
@@ -417,7 +417,7 @@ void computeHEGradVectors(SimpleTriMesh &ipMesh, MeshStats &mStats)
     OpenMesh::FaceHandle fCurr;
     OpenMesh::HalfedgeHandle hCurr;
 
-    hCurr = heIter.handle();
+    hCurr = (*heIter);
     fCurr = ipMesh.face_handle(hCurr);
 
     v1 = ipMesh.from_vertex_handle(hCurr);
@@ -443,18 +443,18 @@ void computeNormalizedAngleWeights(SimpleTriMesh &ipMesh, MeshStats &mStats)
   for(vI = ipMesh.vertices_begin(); vI != vEnd; ++vI)
   {
     //uint hIdx;
-    //uint vIdx = vI.handle().idx();
+    //uint vIdx = (*vI).idx();
     //uint fIdx;
 
     SimpleTriMesh::VertexOHalfedgeIter hIter;
     FN_TYPE wg = 0;
 
-    for (hIter = ipMesh.voh_iter(vI.handle()); hIter; ++hIter)
+    for (hIter = ipMesh.voh_iter((*vI)); hIter.is_valid(); ++hIter)
     {
 
       OpenMesh::HalfedgeHandle hCurr, hPrev;
 
-      hCurr = hIter.handle();
+      hCurr = (*hIter);
 
       if(!ipMesh.is_boundary(hCurr))
       {
@@ -463,12 +463,12 @@ void computeNormalizedAngleWeights(SimpleTriMesh &ipMesh, MeshStats &mStats)
       } //end if
     } // end for
 
-    for (hIter = ipMesh.voh_iter(vI.handle()); hIter; ++hIter)
+    for (hIter = ipMesh.voh_iter((*vI)); hIter.is_valid(); ++hIter)
     {
 
       OpenMesh::HalfedgeHandle hCurr, hPrev;
 
-      hCurr = hIter.handle();
+      hCurr = (*hIter);
 
       hPrev = ipMesh.prev_halfedge_handle(hCurr);
       if(!ipMesh.is_boundary(hCurr))
@@ -507,7 +507,7 @@ void computeHijVecForJacobian(SimpleTriMesh &ipMesh, MeshStats &mStats)
     OpenMesh::HalfedgeHandle hCurr, hOpp, hPrev, hNextOfOpp;
     //long fLeftIdx, fRightIdx;
 
-    hCurr = heIter.handle();
+    hCurr = (*heIter);
     hOpp  = ipMesh.opposite_halfedge_handle(hCurr);
 
     mStats.vecHij[hCurr.idx()][0] = 0;
@@ -536,7 +536,7 @@ void computeVtxGVecForJacobian(SimpleTriMesh &ipMesh, MeshStats &mStats)
   for(vI = ipMesh.vertices_begin(); vI != vEnd; ++vI)
   {
     //uint hIdx;
-    uint vIdx = vI.handle().idx();
+    uint vIdx = (*vI).idx();
 
     SimpleTriMesh::VertexOHalfedgeIter hIter;
 
@@ -545,11 +545,11 @@ void computeVtxGVecForJacobian(SimpleTriMesh &ipMesh, MeshStats &mStats)
     mStats.vecVtxG[vIdx][1] = 0;
     mStats.vecVtxG[vIdx][2] = 0;
 
-    for (hIter = ipMesh.voh_iter(vI.handle()); hIter; ++hIter)
+    for (hIter = ipMesh.voh_iter((*vI)); hIter.is_valid(); ++hIter)
     {
       OpenMesh::HalfedgeHandle hCurr, hNext, hPrev;
 
-      hCurr = hIter.handle();
+      hCurr = (*hIter);
 
       if(!ipMesh.is_boundary(hCurr))
       {
@@ -570,15 +570,15 @@ void computeHijLambdaForJacobian(SimpleTriMesh &ipMesh, MeshStats &mStats)
   for(vI = ipMesh.vertices_begin(); vI != vEnd; ++vI)
   {
     uint hIdx;
-    uint vIdx = vI.handle().idx();
+    uint vIdx = (*vI).idx();
 
     SimpleTriMesh::VertexOHalfedgeIter hIter;
 
 
-    for (hIter = ipMesh.voh_iter(vI.handle()); hIter; ++hIter)
+    for (hIter = ipMesh.voh_iter((*vI)); hIter.is_valid(); ++hIter)
     {
 
-      hIdx = hIter.handle().idx();
+      hIdx = (*hIter).idx();
 
       mStats.meshLamdaIj[vIdx] = mStats.vecVtxG[vIdx] | mStats.vecHij[hIdx];
     } // end for

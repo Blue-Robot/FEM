@@ -80,9 +80,9 @@ int generatePartitions(SimpleTriMesh ipMesh, long int *npart, long int *epart, u
 	for (int i = 0; i < numFaces; i++) {
 		FaceHandle f = ipMesh.face_handle(i);
 		SimpleTriMesh::FaceVertexIter fvIter = ipMesh.fv_begin(f);
-		int v1 = fvIter.handle().idx(); ++fvIter;
-		int v2 = fvIter.handle().idx(); ++fvIter;
-		int v3 = fvIter.handle().idx();
+		int v1 = (*fvIter).idx(); ++fvIter;
+		int v2 = (*fvIter).idx(); ++fvIter;
+		int v3 = (*fvIter).idx();
 		long int v1_part = npart[v1];
 		long int v2_part = npart[v2];
 		long int v3_part = npart[v3];
@@ -156,9 +156,9 @@ void reorderMesh(SimpleTriMesh *orderedMesh, long int *npart, long int *epart) {
 	for (int i = 0; i < originalMesh.n_faces(); i++) {
 		FaceHandle f = originalMesh.face_handle(epart_inv[i]);
 		SimpleTriMesh::FaceVertexIter fvIter = originalMesh.fv_begin(f);
-		VertexHandle v1 = (*orderedMesh).vertex_handle(npart[fvIter.handle().idx()]); ++fvIter;
-		VertexHandle v2 = (*orderedMesh).vertex_handle(npart[fvIter.handle().idx()]); ++fvIter;
-		VertexHandle v3 = (*orderedMesh).vertex_handle(npart[fvIter.handle().idx()]);
+		VertexHandle v1 = (*orderedMesh).vertex_handle(npart[(*fvIter).idx()]); ++fvIter;
+		VertexHandle v2 = (*orderedMesh).vertex_handle(npart[(*fvIter).idx()]); ++fvIter;
+		VertexHandle v3 = (*orderedMesh).vertex_handle(npart[(*fvIter).idx()]);
 
 		(*orderedMesh).add_face(v1, v2, v3);
 	}

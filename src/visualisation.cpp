@@ -236,7 +236,7 @@ extern "C" void initiateVBOData(SimpleTriMesh mesh) {
 
 		int counter = 0;
 		for(SimpleTriMesh::FaceVertexIter fvIter = mesh.fv_begin(f); fvIter != mesh.fv_end(f); ++fvIter) {
-			VertexHandle v = fvIter.handle();
+			VertexHandle v = *fvIter;
 			faceVertices[i*3 + counter] = v.idx();
 			counter++;
 		}

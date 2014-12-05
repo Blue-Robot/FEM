@@ -12,18 +12,18 @@ bool computeLaplacianCPU(SimpleTriMesh &m, Data *fn, Data *lap, FN_TYPE *wHej, F
   for(vI = m.vertices_begin(); vI != vEnd; ++vI)
   {
     uint hIdx;
-    uint vIdx = vI.handle().idx();
-    uint vNbr = vI.handle().idx();
+    uint vIdx = (*vI).idx();
+    uint vNbr = (*vI).idx();
 
     lap[vIdx] = fn[vIdx] * wVtx[vIdx];
 
     SimpleTriMesh::VertexOHalfedgeIter hIter;
-    for (hIter = m.voh_iter(vI.handle()); hIter; ++hIter)
+    for (hIter = m.voh_iter(*vI); hIter.is_valid(); ++hIter)
     {
 
-      vNbr = m.to_vertex_handle(hIter).idx();
+      vNbr = m.to_vertex_handle(*hIter).idx();
 
-      hIdx = hIter.handle().idx();
+      hIdx = (*hIter).idx();
 
       lap[vIdx] += fn[vNbr] * wHej[hIdx];
     }
@@ -44,7 +44,7 @@ bool computeFaceGradientsCPU(SimpleTriMesh &m, Data *gradV12,Data *gradV13, Data
     OpenMesh::FaceHandle fCurr;
     OpenMesh::HalfedgeHandle hCurr,hNext;
 
-    fCurr = fIter.handle();
+    fCurr = *fIter;
     hCurr = m.halfedge_handle(fCurr);
     hNext = m.next_halfedge_handle(hCurr);
 
@@ -66,7 +66,7 @@ bool computeVertexGradientsCPU(SimpleTriMesh &m, Data *faceGrad, Data *opVtxGrad
   for(vI = m.vertices_begin(); vI != vEnd; ++vI)
   {
     //uint hIdx;
-    uint vIdx = vI.handle().idx();
+    uint vIdx = (*vI).idx();
     uint fIdx;
 
 
@@ -77,12 +77,12 @@ bool computeVertexGradientsCPU(SimpleTriMesh &m, Data *faceGrad, Data *opVtxGrad
 
     Data tempD;
 
-    for (hIter = m.voh_iter(vI.handle()); hIter; ++hIter)
+    for (hIter = m.voh_iter(*vI); hIter.is_valid(); ++hIter)
     {
 
       OpenMesh::HalfedgeHandle hCurr, hPrev;
 
-      hCurr = hIter.handle();
+      hCurr = *hIter;
 
 
       if(!m.is_boundary(hCurr))
