@@ -40,12 +40,11 @@ int generatePartitions(SimpleTriMesh ipMesh, long int *npart, long int *epart, u
 	for (int i = 0; i < numFaces; i++) {
 		SimpleTriMesh::FaceHandle face = ipMesh.face_handle(i);
 
-		SimpleTriMesh::FaceEdgeIter vIter, vEnd(ipMesh.fe_end(face));
-		for (vIter = ipMesh.fe_begin(face); vIter != vEnd; ++vIter) {
-			eind[counter] = ipMesh.from_vertex_handle(vIter.current_halfedge_handle()).idx();
+		SimpleTriMesh::FaceVertexIter fvIter, fvEnd(ipMesh.fv_end(face));
+		for (fvIter = ipMesh.fv_begin(face); fvIter != fvEnd; ++fvIter) {
+			eind[counter] = (*fvIter).idx();
 			counter++;
 		}
-
 		eptr[i+1] = counter;
 	}
 
