@@ -35,7 +35,7 @@ using namespace OpenMesh;
 int vertices;
 int faces;
 uint *faceVertices;
-float2 *d_fn;
+double2 *d_fn;
 int frame_counter = 1;
 bool save = true;
 
@@ -65,7 +65,7 @@ extern "C" bool initialize(int *argc, char **argv, int v, int f) {
 	return true;
 }
 
-extern "C" void set_fn(float2 *dev_fn) {
+extern "C" void set_fn(double2 *dev_fn) {
 	d_fn = dev_fn;
 }
 
@@ -85,7 +85,7 @@ extern "C" void display() {
 
 	// render from the vbo
 	glVertexPointer(4, GL_FLOAT, 0, 0);
-	glColorPointer(4, GL_FLOAT, 0, (const GLvoid *) (sizeof(GLfloat) * vertices * 4));
+	glColorPointer(4, GL_DOUBLE, 0, (const GLvoid *) (sizeof(GLdouble) * vertices * 4));
 	glNormalPointer(GL_FLOAT, 0, (const GLvoid *) (sizeof(GLfloat) * vertices * 4 + sizeof(GLfloat) * vertices * 4));
 
 	glEnableClientState(GL_VERTEX_ARRAY);
@@ -213,7 +213,7 @@ void createVBO(GLuint *vbo, struct cudaGraphicsResource **vbo_res, int size, int
 }
 
 extern "C" void initiateVBOData(SimpleTriMesh mesh) {
-	createVBO(&dataVbo, &vbo_res[0], vertices * 4 * 3 * sizeof(GLfloat), GL_ARRAY_BUFFER, cudaGraphicsRegisterFlagsNone);
+	createVBO(&dataVbo, &vbo_res[0], vertices * 4 * 3 * sizeof(GLdouble), GL_ARRAY_BUFFER, cudaGraphicsRegisterFlagsNone);
 	createVBO(&indexVbo, &vbo_res[1], faces * 3 * sizeof(GLuint), GL_ELEMENT_ARRAY_BUFFER, cudaGraphicsRegisterFlagsNone);
 
 	GLfloat position[vertices * 4];

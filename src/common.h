@@ -7,7 +7,7 @@
 typedef double PDE_DOUBLE;
 typedef float  PDE_FLOAT;
 
-typedef PDE_FLOAT FN_TYPE;
+typedef PDE_DOUBLE FN_TYPE;
 typedef PDE_DOUBLE GRID_PT_TYPE;
 
 
